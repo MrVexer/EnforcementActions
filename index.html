@@ -1803,6 +1803,179 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
+
+   /* ==========================================
+   OFFICER WORKLOAD & CASE ASSIGNMENT
+========================================== */
+
+.ow-panel {
+    margin-bottom: 24px;
+}
+
+.ow-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 15px;
+}
+
+.ow-heading h2 {
+    margin: 0;
+    font-size: 18px;
+    color: #f5edf0;
+}
+
+.ow-heading p {
+    margin: 5px 0 0;
+    font-size: 12px;
+    color: #aaa0a8;
+}
+
+.ow-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.ow-card {
+    padding: 18px;
+    border: 1px solid #45323a;
+    border-radius: 11px;
+    background: #242025;
+}
+
+.ow-card h3 {
+    margin: 0 0 14px;
+    color: #f4edf0;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+}
+
+.ow-count {
+    display: block;
+    color: #fff;
+    font-size: 29px;
+    font-weight: 800;
+}
+
+.ow-caption {
+    display: block;
+    color: #aaa0a8;
+    font-size: 11px;
+    margin-top: 4px;
+}
+
+.ow-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 13px;
+}
+
+.ow-tag {
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: #393039;
+    color: #d5c7ce;
+    font-size: 11px;
+}
+
+.ow-load-high {
+    border-left: 3px solid #df475d;
+}
+
+.ow-load-medium {
+    border-left: 3px solid #d6a04f;
+}
+
+.ow-load-low {
+    border-left: 3px solid #4caa7c;
+}
+
+.ow-queue {
+    padding: 18px;
+    border: 1px solid #49343e;
+    border-radius: 11px;
+    background: #211d22;
+}
+
+.ow-queue h3 {
+    margin: 0 0 14px;
+    font-size: 15px;
+    color: #f4edf0;
+}
+
+.ow-queue-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+    padding: 14px 0;
+    border-bottom: 1px solid #3c3037;
+}
+
+.ow-queue-item:last-child {
+    border-bottom: 0;
+}
+
+.ow-queue-info {
+    min-width: 0;
+}
+
+.ow-queue-info strong {
+    display: block;
+    color: #f28d9e;
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+
+.ow-queue-info span {
+    display: block;
+    color: #b8acb4;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.ow-assign {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.ow-assign select {
+    min-width: 150px;
+    padding: 9px;
+    border: 1px solid #57414b;
+    border-radius: 7px;
+    background: #302830;
+    color: #f4edf0;
+}
+
+.ow-empty {
+    padding: 15px 0;
+    color: #aaa0a8;
+    font-size: 13px;
+}
+
+@media (max-width: 1000px) {
+    .ow-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 650px) {
+    .ow-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .ow-queue-item {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
    
     /* Player profile: Notion-style linked database page */
     .profile-heading{display:flex;align-items:center;gap:15px;margin-bottom:22px}
@@ -4926,6 +5099,393 @@ render = function () {
     }
 
     renderBeforeInvestigations();
+};
+
+   // =====================================================
+// OFFICER WORKLOAD & CASE ASSIGNMENT
+// =====================================================
+
+function getOfficerWorkload() {
+
+    const activeCases = data.infractions.filter(rec =>
+        investigationStageFor(rec) !== 'Closed'
+    );
+
+    const officerNames = [
+        ...new Set(
+            data.infractions
+                .map(rec => String(rec.assignedOfficer || '').trim())
+                .filter(Boolean)
+        )
+    ].sort((a, b) => a.localeCompare(b));
+
+    const officers = officerNames.map(name => {
+
+        const cases = activeCases.filter(rec =>
+            String(rec.assignedOfficer || '').trim() === name
+        );
+
+        return {
+            name,
+            cases: cases.length,
+            urgent: cases.filter(rec =>
+                rec.casePriority === 'Urgent'
+            ).length,
+            review: cases.filter(rec =>
+                investigationStageFor(rec) === 'Pending Review'
+            ).length
+        };
+    });
+
+    officers.sort((a, b) =>
+        b.cases - a.cases || a.name.localeCompare(b.name)
+    );
+
+    return {
+        officers,
+        officerNames,
+        unassigned: activeCases.filter(rec =>
+            !String(rec.assignedOfficer || '').trim()
+        )
+    };
+}
+
+
+// -----------------------------------------------------
+// RENDER WORKLOAD PANEL
+// -----------------------------------------------------
+
+function renderOfficerWorkload() {
+
+    if (page !== 'investigations') return;
+
+    const board = document.querySelector('.im-board');
+
+    if (!board) return;
+
+    // Prevent duplicate panels.
+    board.querySelector('.ow-panel')?.remove();
+
+    const workload = getOfficerWorkload();
+
+    const officerCards = workload.officers.length
+
+        ? workload.officers.map(officer => {
+
+            const loadClass =
+                officer.cases >= 6
+                    ? 'ow-load-high'
+                    : officer.cases >= 3
+                        ? 'ow-load-medium'
+                        : 'ow-load-low';
+
+            return `
+                <div class="ow-card ${loadClass}">
+
+                    <h3>${esc(officer.name)}</h3>
+
+                    <span class="ow-count">
+                        ${officer.cases}
+                    </span>
+
+                    <span class="ow-caption">
+                        Active investigations
+                    </span>
+
+                    <div class="ow-meta">
+
+                        <span class="ow-tag">
+                            ${officer.urgent} Urgent
+                        </span>
+
+                        <span class="ow-tag">
+                            ${officer.review} Awaiting Review
+                        </span>
+
+                    </div>
+
+                    <div style="margin-top:13px">
+
+                        <button
+                            type="button"
+                            class="secondary"
+                            data-ow-officer="${esc(officer.name)}"
+                        >
+                            View Cases
+                        </button>
+
+                    </div>
+
+                </div>
+            `;
+
+        }).join('')
+
+        : `
+            <div class="ow-empty">
+                No officers have been assigned to cases yet.
+            </div>
+        `;
+
+    const unassignedHTML = workload.unassigned.length
+
+        ? workload.unassigned.map(rec => `
+
+            <div class="ow-queue-item">
+
+                <div class="ow-queue-info">
+
+                    <strong>${esc(rec.id)}</strong>
+
+                    <span>
+                        ${esc(player(rec.player))}
+                        · ${esc(rec.type || 'Rule violation')}
+                    </span>
+
+                    <div style="margin-top:8px">
+                        ${badge(rec.casePriority || 'Normal')}
+                    </div>
+
+                </div>
+
+                <div class="ow-assign">
+
+                    <select
+                        aria-label="Assign officer to ${esc(rec.id)}"
+                        data-ow-select="${esc(rec.id)}"
+                    >
+
+                        <option value="">
+                            Select Officer
+                        </option>
+
+                        ${workload.officerNames.map(name => `
+                            <option value="${esc(name)}">
+                                ${esc(name)}
+                            </option>
+                        `).join('')}
+
+                        <option value="__new__">
+                            + New Officer
+                        </option>
+
+                    </select>
+
+                    <button
+                        type="button"
+                        class="primary"
+                        data-ow-assign="${esc(rec.id)}"
+                    >
+                        Assign
+                    </button>
+
+                </div>
+
+            </div>
+        `).join('')
+
+        : `
+            <div class="ow-empty">
+                ✓ All active investigations have an assigned officer.
+            </div>
+        `;
+
+    const html = `
+
+        <section class="ow-panel">
+
+            <div class="ow-heading">
+
+                <div>
+                    <h2>Officer Workload & Assignments</h2>
+                    <p>
+                        Review active investigations and distribute
+                        unassigned cases.
+                    </p>
+                </div>
+
+            </div>
+
+            <div class="ow-grid">
+                ${officerCards}
+            </div>
+
+            <div class="ow-queue">
+
+                <h3>
+                    Unassigned Investigations
+                    (${workload.unassigned.length})
+                </h3>
+
+                ${unassignedHTML}
+
+            </div>
+
+        </section>
+    `;
+
+    board.insertAdjacentHTML('afterbegin', html);
+}
+
+
+// -----------------------------------------------------
+// ASSIGN AN OFFICER
+// -----------------------------------------------------
+
+function assignInvestigationOfficer(caseId, officerName) {
+
+    const rec = data.infractions.find(
+        item => item.id === caseId
+    );
+
+    if (!rec) {
+        alert('Investigation not found.');
+        return;
+    }
+
+    if (investigationStageFor(rec) === 'Closed') {
+        alert('Closed investigations cannot be assigned here.');
+        return;
+    }
+
+    const name = String(officerName || '').trim();
+
+    if (!name) {
+        alert('Please select an officer.');
+        return;
+    }
+
+    if (name.length > 100) {
+        alert('Officer name is too long.');
+        return;
+    }
+
+    if (rec.assignedOfficer === name) {
+        return;
+    }
+
+    const previous = structuredClone(rec);
+
+    rec.assignedOfficer = name;
+
+    // Move newly reported cases to Assigned.
+    if (
+        !rec.investigationStage ||
+        rec.investigationStage === 'Reported'
+    ) {
+        rec.investigationStage = 'Assigned';
+    }
+
+    // Record the assignment using the existing audit system.
+    if (typeof logAudit === 'function') {
+
+        logAudit(
+            'Officer assigned',
+            'infractions',
+            rec.id,
+            previous,
+            structuredClone(rec),
+            'Assigned ' + rec.id + ' to ' + name
+        );
+
+    } else {
+
+        data.activity.push({
+            id: 'LOG-' + Date.now(),
+            time: new Date().toLocaleString(),
+            action: 'Officer assigned',
+            section: 'infractions',
+            recordId: rec.id,
+            details: 'Assigned ' + rec.id + ' to ' + name
+        });
+    }
+
+    save();
+    render();
+}
+
+
+// -----------------------------------------------------
+// WORKLOAD BUTTON HANDLERS
+// -----------------------------------------------------
+
+document.getElementById('content').addEventListener(
+    'click',
+    event => {
+
+        // Filter the board to a specific officer.
+        const officerButton = event.target.closest(
+            '[data-ow-officer]'
+        );
+
+        if (officerButton) {
+
+            investigationOfficer =
+                officerButton.dataset.owOfficer;
+
+            render();
+
+            return;
+        }
+
+        // Assign a case.
+        const assignButton = event.target.closest(
+            '[data-ow-assign]'
+        );
+
+        if (!assignButton) return;
+
+        const caseId = assignButton.dataset.owAssign;
+
+        const select = Array.from(
+            document.querySelectorAll('[data-ow-select]')
+        ).find(element => element.dataset.owSelect === caseId);
+
+        if (!select) return;
+
+        let officerName = select.value;
+
+        if (officerName === '__new__') {
+
+            const entered = prompt(
+                'Enter the Enforcement Officer name:'
+            );
+
+            if (entered === null) return;
+
+            officerName = entered.trim();
+        }
+
+        if (!officerName) {
+            alert('Please select or enter an officer.');
+            return;
+        }
+
+        const confirmed = confirm(
+            'Assign case ' + caseId +
+            ' to ' + officerName + '?'
+        );
+
+        if (!confirmed) return;
+
+        assignInvestigationOfficer(caseId, officerName);
+    }
+);
+
+
+// -----------------------------------------------------
+// CONNECT WORKLOAD PANEL TO THE BOARD
+// -----------------------------------------------------
+
+const renderBeforeOfficerWorkload = render;
+
+render = function () {
+
+    renderBeforeOfficerWorkload();
+
+    if (page === 'investigations') {
+        renderOfficerWorkload();
+    }
 };
 // Render the workspace.
 render();
