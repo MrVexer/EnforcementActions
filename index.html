@@ -3033,31 +3033,115 @@ function showEnhancedInfractionCase(caseId) {
             </p>
         `;
 
-    const html = `
-    <section class="ow-panel">
 
-        <div class="ow-heading">
+     const html = `
+    <div class="casefile">
+
+        <div class="casefile-header">
             <div>
-                <h2>Officer Workload & Assignments</h2>
-                <p>
-                    Review active investigations and distribute
-                    unassigned cases.
+                <h2>Infraction Case — ${esc(rec.id)}</h2>
+                <p class="muted">
+                    ${esc(rec.type || 'Unspecified rule violation')}
                 </p>
+            </div>
+
+            <div>
+                ${badge(rec.status || 'Open')}
+                ${badge(rec.severity || 'Moderate')}
             </div>
         </div>
 
-        <div class="ow-grid">
-            ${officerCards}
+        <div class="casefile-section">
+            <h3>Case Information</h3>
+
+            <div class="formgrid">
+
+                <div class="record">
+                    <span class="key">Player</span>
+                    <p>${esc(player(rec.player))}</p>
+                </div>
+
+                <div class="record">
+                    <span class="key">Incident Date</span>
+                    <p>${esc(rec.date || 'Not recorded')}</p>
+                </div>
+
+                <div class="record">
+                    <span class="key">Reporting Officer</span>
+                    <p>${esc(rec.officer || 'Not recorded')}</p>
+                </div>
+
+                <div class="record">
+                    <span class="key">Assigned Officer</span>
+                    <p>${esc(rec.assignedOfficer || 'Unassigned')}</p>
+                </div>
+
+            </div>
         </div>
 
-        <div class="ow-queue">
-            <h3>Unassigned Investigations</h3>
-            ${unassignedHTML}
+        <div class="casefile-section">
+            <h3>Incident Description</h3>
+            <p class="sp-notes">
+                ${esc(rec.description || 'No description recorded.')}
+            </p>
         </div>
 
-    </section>
+        ${
+            typeof renderInvestigationWorkflow === 'function'
+                ? renderInvestigationWorkflow(rec)
+                : ''
+        }
+
+        <div class="casefile-section">
+            <h3>Investigation Notes</h3>
+            <p class="sp-notes">
+                ${esc(rec.investigationNotes || 'No notes recorded.')}
+            </p>
+        </div>
+
+        <div class="casefile-section">
+            <h3>Evidence</h3>
+            ${evidenceHTML}
+        </div>
+
+        <div class="casefile-section">
+            <h3>Linked Punishments</h3>
+            ${punishmentsHTML}
+        </div>
+
+        <div class="casefile-section">
+            <h3>Case Activity Timeline</h3>
+            ${timelineHTML}
+        </div>
+
+        <div class="actions">
+
+            <button type="button" class="secondary" id="casefileClose">
+                Close
+            </button>
+
+            <button type="button" class="secondary" id="casefilePlayer">
+                View Player
+            </button>
+
+            <button type="button" class="secondary" id="iwEditWorkflow">
+                Edit Investigation
+            </button>
+
+            <button type="button" class="primary" id="casefileEdit">
+                Edit Case
+            </button>
+
+            <button type="button" class="primary" id="casefilePunishment">
+                ⚖ Issue Punishment
+            </button>
+
+        </div>
+
+    </div>
 `;
 
+    
     modal('Infraction Case — ' + rec.id, html);
 
     document.getElementById('casefileClose').onclick = close;
