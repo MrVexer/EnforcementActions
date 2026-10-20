@@ -818,7 +818,81 @@
           }
         }
         let prefix={players:'P',infractions:'INF',punishments:'PUN',appeals:'APP'}[page];obj.id=record?.id||prefix+'-'+String(Math.max(0,...data[page].map(x=>Number(x.id.split('-')[1])||0))+1).padStart(3,'0');if(page==='appeals'&&obj.status==='Approved'&&obj.punishment){let p=data.punishments.find(x=>x.id===obj.punishment);if(p)p.status='Revoked'}if(existing){Object.assign(record,obj)}else data[page].push(obj);data.activity.push({id:'LOG-'+Date.now(),time:new Date().toLocaleString(),action:existing?'Record edited':'Record created',details:`${page}: ${obj.id}`});save();close();render()}}
-    function openRecord(id){let section=page==='overview'?'infractions':page;let rec=data[section]?.find(x=>x.id===id);if(!rec)return;let original=page;page=section;
+   // =====================================================
+// ISSUE PUNISHMENT DIRECTLY FROM AN INFRACTION
+// =====================================================
+
+function issuePunishment(infractionId) {
+
+    const infraction = data.infractions.find(
+        item => item.id === infractionId
+    );
+
+    if (!infraction) {
+        alert('Infraction record not found.');
+        return;
+    }
+
+    // Navigate to the Punishments Database.
+    page = 'punishments';
+    filter = '';
+    statusFilter = 'All';
+    viewMode = 'table';
+
+    render();
+
+    // Open the existing punishment form.
+    edit(null);
+
+    const form = document.getElementById('recordForm');
+
+    if (!form) {
+        alert('Unable to open the punishment form.');
+        return;
+    }
+
+    // Automatically link the correct player.
+    const playerField = form.elements.namedItem('player');
+
+    if (playerField) {
+        playerField.value = infraction.player;
+    }
+
+    // Automatically link the originating infraction.
+    const infractionField = form.elements.namedItem('infraction');
+
+    if (infractionField) {
+        infractionField.value = infraction.id;
+        infractionField.readOnly = true;
+    }
+
+    // Pre-fill the incident details.
+    const notesField = form.elements.namedItem('notes');
+
+    if (notesField) {
+        notesField.value =
+            'Linked infraction: ' + infraction.id + '\n' +
+            'Rule violated: ' + (infraction.type || 'Not specified') + '\n\n' +
+            'Punishment reason:\n';
+    }
+
+    // Set today's local date.
+    const dateField = form.elements.namedItem('date');
+
+    if (dateField) {
+        const now = new Date();
+        const localDate = new Date(
+            now.getTime() - now.getTimezoneOffset() * 60000
+        ).toISOString().slice(0, 10);
+
+        dateField.value = localDate;
+    }
+
+    // Update the modal heading.
+    document.getElementById('modalTitle').textContent =
+        'Issue Punishment — ' + infraction.id;
+} 
+   function openRecord(id){let section=page==='overview'?'infractions':page;let rec=data[section]?.find(x=>x.id===id);if(!rec)return;let original=page;page=section;
       if(section==='players'){
         const cases=data.infractions.filter(x=>x.player===rec.id);
         const punishments=data.punishments.filter(x=>x.player===rec.id);
@@ -886,7 +960,21 @@
         </div>
     `;
 
-}).join('');modal(id,`<div class="formgrid">${info}</div><div class="actions"><button class="secondary" id="cancel">Close</button><button class="primary" id="editRecord">Edit record</button></div>`);document.getElementById('cancel').onclick=()=>{close();page=original;render()};document.getElementById('editRecord').onclick=()=>edit(rec)}
+}).join('');modal(id,`<div class="formgrid">${info}</div><div class="actions"><button class="secondary" id="cancel">Close</button><button class="primary" id="editRecord">Edit record</button>
+${section === 'infractions' ? '<button class="primary" id="issuePunishment">⚖ Issue Punishment</button>' : ''}</div>`);document.getElementById('cancel').onclick=()=>{close();page=original;render()};document.getElementById('editRecord').onclick = () => edit(rec);
+
+// Connect the Issue Punishment button.
+if (section === 'infractions') {
+
+    const punishmentButton =
+        document.getElementById('issuePunishment');
+
+    if (punishmentButton) {
+        punishmentButton.onclick = () => {
+            issuePunishment(rec.id);
+        };
+    }
+}}
     
     function close(){document.getElementById('modalback').classList.remove('show')}document.getElementById('close').onclick=close;document.getElementById('modalback').onclick=e=>{if(e.target.id==='modalback')close()};document.getElementById('add').onclick=()=>edit(null);document.getElementById('export').onclick=()=>{let blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='vengeful-realms-demo-export.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};document.getElementById('mobileToggle').onclick=()=>document.body.classList.toggle('sidebar-open');render();
 
