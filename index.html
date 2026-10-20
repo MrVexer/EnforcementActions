@@ -686,6 +686,16 @@
       }
     }
 
+   .modal:has(.sp-profile) {
+    width: min(900px, 96vw);
+}
+
+.sp-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
    /* ==========================================
    INFRACTION CASE TRACKING
 ========================================== */
@@ -2097,6 +2107,169 @@
 
 @media (max-width: 600px) {
     .sd-grid, .sd-stats, .sd-form {
+        grid-template-columns: 1fr;
+    }
+}
+
+   /* ==========================================
+   STAFF PROFILE DETAIL PAGE
+========================================== */
+
+.sp-profile {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.sp-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 19px;
+    border: 1px solid #703541;
+    border-radius: 11px;
+    background: linear-gradient(115deg, #38202a, #211d22);
+}
+
+.sp-avatar {
+    width: 58px;
+    height: 58px;
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    background: #572836;
+    color: #ffb4c1;
+    font-size: 24px;
+    font-weight: 800;
+}
+
+.sp-header h3 {
+    margin: 0 0 8px;
+    font-size: 20px;
+    color: #fff;
+}
+
+.sp-header p {
+    margin: 6px 0;
+    color: #bdb0b9;
+    font-size: 12px;
+}
+
+.sp-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.sp-stat {
+    padding: 15px;
+    border: 1px solid #45323b;
+    border-radius: 9px;
+    background: #292329;
+}
+
+.sp-stat strong {
+    display: block;
+    font-size: 25px;
+    color: #fff;
+}
+
+.sp-stat span {
+    display: block;
+    margin-top: 7px;
+    font-size: 11px;
+    color: #b7abb3;
+}
+
+.sp-section {
+    padding: 17px;
+    border: 1px solid #45333d;
+    border-radius: 10px;
+    background: #242025;
+}
+
+.sp-section h3 {
+    margin: 0 0 15px;
+    color: #f4edf0;
+    font-size: 15px;
+}
+
+.sp-details {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 13px;
+}
+
+.sp-detail span {
+    display: block;
+    margin-bottom: 5px;
+    color: #aaa0a8;
+    font-size: 11px;
+}
+
+.sp-detail strong {
+    color: #f5edf0;
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+
+.sp-case {
+    width: 100%;
+    padding: 13px;
+    margin-bottom: 8px;
+    border: 1px solid #49333d;
+    border-radius: 8px;
+    background: #30262d;
+    color: #f5edf0;
+    text-align: left;
+    cursor: pointer;
+}
+
+.sp-case:hover {
+    border-color: #d34b61;
+    background: #3a2932;
+}
+
+.sp-case strong {
+    display: block;
+    margin-bottom: 7px;
+}
+
+.sp-case small {
+    color: #b8adb5;
+}
+
+.sp-event {
+    padding: 11px 0;
+    border-bottom: 1px solid #40313a;
+}
+
+.sp-event:last-child {
+    border-bottom: none;
+}
+
+.sp-event strong {
+    display: block;
+    color: #f0e8ed;
+    font-size: 12px;
+}
+
+.sp-event small {
+    display: block;
+    margin-top: 5px;
+    color: #a99da6;
+}
+
+.sp-notes {
+    color: #d1c5cd;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.6;
+}
+
+@media (max-width: 600px) {
+    .sp-stats, .sp-details {
         grid-template-columns: 1fr;
     }
 }
@@ -5618,6 +5791,14 @@ function renderStaffDirectory() {
 
             <div class="sd-actions">
 
+            <button
+    type="button"
+    class="primary"
+    data-sd-profile="${esc(member.id)}"
+>
+    View Profile
+</button>
+
                 <button
                     type="button"
                     class="secondary"
@@ -5749,6 +5930,14 @@ function renderStaffDirectory() {
     document.getElementById('sdAdd').onclick = () => {
         openStaffEditor(null);
     };
+
+ container.querySelectorAll('[data-sd-profile]').forEach(button => {
+
+    button.onclick = () => {
+        openStaffProfile(button.dataset.sdProfile);
+    };
+
+});
 
     container.querySelectorAll('[data-sd-edit]').forEach(button => {
         button.onclick = () => {
@@ -5965,6 +6154,268 @@ function openStaffEditor(member) {
     };
 }
 
+   // =====================================================
+// STAFF PROFILE DETAIL PAGE
+// =====================================================
+
+function openStaffProfile(staffId) {
+
+    const member = staffById(staffId);
+
+    if (!member) {
+        alert('Staff member not found.');
+        return;
+    }
+
+    // Find cases by permanent staff ID or legacy officer name.
+    const assignedCases = data.infractions.filter(rec => {
+
+        return rec.assignedOfficerId === member.id ||
+            (
+                !rec.assignedOfficerId &&
+                rec.assignedOfficer === member.name
+            );
+    });
+
+    const activeCases = assignedCases.filter(rec =>
+        investigationStageFor(rec) !== 'Closed'
+    );
+
+    const closedCases = assignedCases.filter(rec =>
+        investigationStageFor(rec) === 'Closed'
+    );
+
+    // Staff-specific audit history.
+    const staffEvents = data.activity
+        .filter(entry =>
+            entry.section === 'staff' &&
+            entry.recordId === member.id
+        )
+        .slice()
+        .reverse()
+        .slice(0, 10);
+
+    const initials = member.name
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map(part => part[0])
+        .join('')
+        .toUpperCase();
+
+    const caseHTML = assignedCases.length
+        ? assignedCases.map(rec => `
+
+            <button
+                type="button"
+                class="sp-case"
+                data-sp-case="${esc(rec.id)}"
+            >
+
+                <strong>
+                    ${esc(rec.id)} —
+                    ${esc(rec.type || 'Unspecified violation')}
+                </strong>
+
+                <small>
+                    Player: ${esc(player(rec.player))}
+                    · Stage: ${esc(investigationStageFor(rec))}
+                    · Priority: ${esc(rec.casePriority || 'Normal')}
+                </small>
+
+            </button>
+
+        `).join('')
+        : '<p class="sd-muted">No assigned investigations.</p>';
+
+    const eventHTML = staffEvents.length
+        ? staffEvents.map(entry => `
+
+            <div class="sp-event">
+
+                <strong>
+                    ${esc(entry.action || 'Staff activity')}
+                </strong>
+
+                <small>
+                    ${esc(entry.time || 'Unknown date')}
+                </small>
+
+                <small>
+                    ${esc(entry.details || '')}
+                </small>
+
+            </div>
+
+        `).join('')
+        : '<p class="sd-muted">No recorded staff activity.</p>';
+
+    modal('Staff Profile — ' + member.name, `
+
+        <div class="sp-profile">
+
+            <div class="sp-header">
+
+                <div class="sp-avatar">
+                    ${esc(initials || '?')}
+                </div>
+
+                <div>
+
+                    <h3>${esc(member.name)}</h3>
+
+                    <p>${esc(member.id)}</p>
+
+                    <div>
+                        ${badge(member.role)}
+                        ${badge(member.status)}
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="sp-stats">
+
+                <div class="sp-stat">
+                    <strong>${assignedCases.length}</strong>
+                    <span>Total Assigned Cases</span>
+                </div>
+
+                <div class="sp-stat">
+                    <strong>${activeCases.length}</strong>
+                    <span>Active Cases</span>
+                </div>
+
+                <div class="sp-stat">
+                    <strong>${closedCases.length}</strong>
+                    <span>Closed Cases</span>
+                </div>
+
+            </div>
+
+            <div class="sp-section">
+
+                <h3>Staff Information</h3>
+
+                <div class="sp-details">
+
+                    <div class="sp-detail">
+                        <span>Discord</span>
+                        <strong>
+                            ${esc(member.discord || 'Not recorded')}
+                        </strong>
+                    </div>
+
+                    <div class="sp-detail">
+                        <span>Join Date</span>
+                        <strong>
+                            ${esc(member.joinDate || 'Not recorded')}
+                        </strong>
+                    </div>
+
+                    <div class="sp-detail">
+                        <span>Staff Role</span>
+                        <strong>${esc(member.role)}</strong>
+                    </div>
+
+                    <div class="sp-detail">
+                        <span>Current Status</span>
+                        <strong>${esc(member.status)}</strong>
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="sp-section">
+
+                <h3>Assigned Investigations</h3>
+
+                ${caseHTML}
+
+            </div>
+
+            <div class="sp-section">
+
+                <h3>Recent Staff Activity</h3>
+
+                ${eventHTML}
+
+            </div>
+
+            <div class="sp-section">
+
+                <h3>Internal Staff Notes</h3>
+
+                <div class="sp-notes">
+                    ${esc(member.notes || 'No internal notes recorded.')}
+                </div>
+
+            </div>
+
+            <div class="sp-actions">
+
+                <button
+                    type="button"
+                    class="secondary"
+                    id="spEdit"
+                >
+                    Edit Staff Profile
+                </button>
+
+                <button
+                    type="button"
+                    class="secondary"
+                    id="spViewCases"
+                >
+                    View Cases on Board
+                </button>
+
+                <button
+                    type="button"
+                    class="secondary"
+                    id="spClose"
+                >
+                    Close
+                </button>
+
+            </div>
+
+        </div>
+    `);
+
+    document.getElementById('spEdit').onclick = () => {
+        openStaffEditor(member);
+    };
+
+    document.getElementById('spViewCases').onclick = () => {
+
+        close();
+
+        investigationOfficer = member.name;
+        page = 'investigations';
+
+        render();
+    };
+
+    document.getElementById('spClose').onclick = close;
+
+    document.querySelectorAll('[data-sp-case]').forEach(button => {
+
+        button.onclick = () => {
+
+            const caseId = button.dataset.spCase;
+
+            close();
+
+            page = 'infractions';
+            render();
+
+            openRecord(caseId);
+        };
+    });
+}
 
 // -----------------------------------------------------
 // CONNECT STAFF DIRECTORY TO THE WORKSPACE
