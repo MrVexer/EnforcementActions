@@ -1148,6 +1148,114 @@
         grid-template-columns: 1fr;
     }
 }
+
+   /* ==========================================
+   VENGEFUL REALMS - STATUS BADGES
+========================================== */
+
+.vr-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--status-border, #555);
+    background: var(--status-bg, #303034);
+    color: var(--status-color, #ddd);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: .15px;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.vr-status-icon {
+    display: inline-block;
+    font-size: 12px;
+    line-height: 1;
+}
+
+.vr-status-active,
+.vr-status-approved {
+    --status-bg: #183c2b;
+    --status-border: #367d53;
+    --status-color: #83e3ac;
+}
+
+.vr-status-open,
+.vr-status-denied {
+    --status-bg: #49212b;
+    --status-border: #a34556;
+    --status-color: #ff9da7;
+}
+
+.vr-status-investigating {
+    --status-bg: #1d354f;
+    --status-border: #426c9d;
+    --status-color: #94c6ff;
+}
+
+.vr-status-pending,
+.vr-status-moderate {
+    --status-bg: #4b391c;
+    --status-border: #977234;
+    --status-color: #f3d082;
+}
+
+.vr-status-resolved {
+    --status-bg: #19443d;
+    --status-border: #347f70;
+    --status-color: #8de0cd;
+}
+
+.vr-status-expired {
+    --status-bg: #4a3020;
+    --status-border: #98603a;
+    --status-color: #f0b27c;
+}
+
+.vr-status-revoked {
+    --status-bg: #382747;
+    --status-border: #76529a;
+    --status-color: #c8a9e8;
+}
+
+.vr-status-dismissed,
+.vr-status-unknown {
+    --status-bg: #303034;
+    --status-border: #5b5b64;
+    --status-color: #b8b8be;
+}
+
+.vr-status-critical {
+    --status-bg: #581b27;
+    --status-border: #b12b40;
+    --status-color: #ff8791;
+}
+
+.vr-status-high {
+    --status-bg: #4c2b22;
+    --status-border: #a65d42;
+    --status-color: #ffb197;
+}
+
+.vr-status-low {
+    --status-bg: #263a31;
+    --status-border: #4a7860;
+    --status-color: #b4dfc2;
+}
+
+.vr-status-warning {
+    --status-bg: #493820;
+    --status-border: #95703a;
+    --status-color: #f1ca83;
+}
+
+.vr-status:hover {
+    filter: brightness(1.12);
+    transition: filter .15s ease;
+}
    
     /* Player profile: Notion-style linked database page */
     .profile-heading{display:flex;align-items:center;gap:15px;margin-bottom:22px}
@@ -1255,7 +1363,111 @@
     
     function player(id){return data.players.find(x=>x.id===id)?.name||id||'Unknown'}
     
-    function badge(s){let c=/ban|denied|open/i.test(s)?'red':/active|resolved|approved/i.test(s)?'green':/pending|warning/i.test(s)?'amber':'';return `<span class="pill ${c}">${esc(s)}</span>`}
+    // =====================================================
+// VENGEFUL REALMS - STATUS BADGE SYSTEM
+// =====================================================
+
+function badge(status) {
+
+    const label = String(status ?? 'Unknown').trim() || 'Unknown';
+
+    const key = label.toLowerCase();
+
+    const badgeConfig = {
+
+        active: {
+            icon: '✓',
+            style: 'active'
+        },
+
+        open: {
+            icon: '!',
+            style: 'open'
+        },
+
+        investigating: {
+            icon: '⌕',
+            style: 'investigating'
+        },
+
+        pending: {
+            icon: '◷',
+            style: 'pending'
+        },
+
+        resolved: {
+            icon: '✓',
+            style: 'resolved'
+        },
+
+        expired: {
+            icon: '⌛',
+            style: 'expired'
+        },
+
+        revoked: {
+            icon: '⊘',
+            style: 'revoked'
+        },
+
+        dismissed: {
+            icon: '−',
+            style: 'dismissed'
+        },
+
+        approved: {
+            icon: '✓',
+            style: 'approved'
+        },
+
+        denied: {
+            icon: '✕',
+            style: 'denied'
+        },
+
+        critical: {
+            icon: '‼',
+            style: 'critical'
+        },
+
+        high: {
+            icon: '!',
+            style: 'high'
+        },
+
+        moderate: {
+            icon: '◆',
+            style: 'moderate'
+        },
+
+        low: {
+            icon: '●',
+            style: 'low'
+        },
+
+        warning: {
+            icon: '!',
+            style: 'warning'
+        }
+    };
+
+    const config = badgeConfig[key] || {
+        icon: '•',
+        style: 'unknown'
+    };
+
+    return `
+        <span class="vr-status vr-status-${config.style}">
+
+            <span class="vr-status-icon" aria-hidden="true">
+                ${config.icon}
+            </span>
+
+            <span>${esc(label)}</span>
+
+        </span>
+    `;
+}
     
     function nav(){document.getElementById('nav').innerHTML='<div class="navgroup">WORKSPACE</div>'+KEYS.map((k,i)=>`${i===1?'<div class="navgroup">DATABASES</div>':''}<button class="nav ${page===k?'active':''}" data-page="${k}"><span class="nav-icon">${ICON[k]}</span> ${LABEL[k]}</button>`).join('');document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{page=b.dataset.page;filter='';statusFilter='All';viewMode='table';document.body.classList.remove('sidebar-open');render()})}
     
