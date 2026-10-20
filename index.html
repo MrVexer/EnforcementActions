@@ -847,6 +847,81 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
+
+   /* ==========================================
+   ENFORCEMENT AUDIT LOG
+========================================== */
+
+.audit-heading {
+    margin-bottom: 20px;
+}
+
+.audit-heading h2 {
+    margin: 0 0 6px;
+    font-size: 20px;
+}
+
+.audit-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 18px;
+}
+
+.audit-controls input {
+    flex: 1;
+    min-width: 220px;
+}
+
+.audit-controls select {
+    min-width: 170px;
+}
+
+.audit-summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.audit-stat {
+    padding: 18px;
+    background: #1c1c1f;
+    border: 1px solid #343438;
+    border-radius: 9px;
+    border-left: 3px solid #c7273a;
+}
+
+.audit-stat span {
+    display: block;
+    color: #aaa5ad;
+    font-size: 12px;
+    margin-bottom: 8px;
+}
+
+.audit-stat strong {
+    font-size: 26px;
+}
+
+.audit-record {
+    cursor: pointer;
+}
+
+.audit-record:hover {
+    background: #2a2024;
+}
+
+.audit-detail {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.6;
+}
+
+@media (max-width: 650px) {
+    .audit-summary {
+        grid-template-columns: 1fr;
+    }
+}
    
     /* Player profile: Notion-style linked database page */
     .profile-heading{display:flex;align-items:center;gap:15px;margin-bottom:22px}
@@ -962,7 +1037,7 @@
     
     function row(id,cells){return `<tr data-record="${esc(id)}">${cells.map(c=>`<td>${c}</td>`).join('')}</tr>`}
     
-    function render(){nav();document.getElementById('title').textContent=LABEL[page];document.getElementById('crumb').textContent=LABEL[page];document.getElementById('subtitle').textContent=({overview:'Your enforcement command centre',players:'Accounts and linked character histories',infractions:'Investigations and rule violations',punishments:'Warnings, kicks, and bans',appeals:'Punishment reviews and outcomes',activity:'Local demo activity history'})[page];document.getElementById('add').style.display=['overview','activity'].includes(page)?'none':'';let html='';if(page==='overview'){let active=data.punishments.filter(x=>x.status==='Active').length,pending=data.appeals.filter(x=>x.status==='Pending').length;html=`<div class="workspace-intro"><div><h2>Enforcement command centre</h2><p>Review incidents, manage player records and track disciplinary actions.</p></div><div class="intro-mark">⚔</div></div><div class="stats">${[['Players',data.players.length],['Infractions',data.infractions.length],['Active punishments',active],['Pending appeals',pending]].map(([k,v])=>`<div class="stat"><span>${k}</span><strong>${v}</strong></div>`).join('')}</div><div class="panel"><h2>Recent infractions</h2>${table(['Case','Player','Violation','Status'],data.infractions.slice(-6).reverse().map(x=>row(x.id,[esc(x.id),esc(player(x.player)),esc(x.type),badge(x.status)])))}</div>`}else if(page==='activity'){html=table(['Time','Action','Details'],data.activity.slice().reverse().map(x=>row(x.id,[esc(x.time),esc(x.action),esc(x.details)])))}else{let items=data[page];let statusOptions=page==='players'?[]:Array.from(new Set(items.map(x=>x.status).filter(Boolean)));let fields={players:['id','name','discord','characters','cases','punishments'],infractions:['id','player','type','severity','status','date'],punishments:['id','player','action','duration','status','date'],appeals:['id','player','punishment','status','reviewer']}[page];let names={id:'Record ID',name:'Player',discord:'Discord ID',characters:'Characters',player:'Player',type:'Rule Violated',severity:'Severity',status:'Status',date:'Date',action:'Punishment',duration:'Duration',punishment:'Linked punishment',reviewer:'Reviewer',cases:'Infractions',punishments:'Punishments'};let filtered=items.filter(x=>(statusFilter==='All'||x.status===statusFilter)&&Object.values(x).join(' ').toLowerCase().includes(filter.toLowerCase())||(statusFilter==='All'||x.status===statusFilter)&&player(x.player).toLowerCase().includes(filter.toLowerCase()));html=`<div class="viewbar"><div class="viewtabs"><button class="viewtab ${viewMode==='table'?'selected':''}" data-view="table">▤ &nbsp; Table</button><button class="viewtab ${viewMode==='board'?'selected':''}" data-view="board">▥ &nbsp; Board</button></div><span class="muted">${filtered.length} entries</span></div><div class="toolbar"><input class="search" id="search" placeholder="Search ${LABEL[page].toLowerCase()}…" value="${esc(filter)}">${statusOptions.length?`<select id="statusFilter"><option>All</option>${statusOptions.map(s=>`<option ${statusFilter===s?'selected':''}>${esc(s)}</option>`).join('')}</select>`:''}<span class="muted">${filtered.length} records</span></div>`+(viewMode==='table'?table(fields.map(f=>names[f]||f),filtered.map(x=>row(x.id,fields.map(f=>f==='player'?esc(player(x[f])):f==='cases'?data.infractions.filter(i=>i.player===x.id).length:f==='punishments'?data.punishments.filter(i=>i.player===x.id).length:f==='status'?badge(x[f]):esc(x[f]))))):`<div class="board">${(statusOptions.length?statusOptions:['All records']).map(st=>`<div class="board-col"><div class="board-title">${esc(st)} <span class="board-count">${filtered.filter(x=>!statusOptions.length||x.status===st).length}</span></div>${filtered.filter(x=>!statusOptions.length||x.status===st).map(x=>`<div class="board-card" data-record="${esc(x.id)}"><strong>${esc(x.name||x.type||x.action||x.id)}</strong><small>${esc(x.player?player(x.player):x.id)}</small><div style="margin-top:10px">${x.status?badge(x.status):''}</div></div>`).join('')||'<div class="muted">No records</div>'}</div>`).join('')}</div>`)}document.getElementById('content').innerHTML=html;document.querySelectorAll('[data-record]').forEach(tr=>tr.onclick=()=>openRecord(tr.dataset.record));document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{viewMode=b.dataset.view;render()});let search=document.getElementById('search');if(search)search.oninput=e=>{let start=e.target.selectionStart;filter=e.target.value;render();let s=document.getElementById('search');s.focus();s.setSelectionRange(start,start)};let sf=document.getElementById('statusFilter');if(sf)sf.onchange=e=>{statusFilter=e.target.value;render()}}
+    function render(){nav();document.getElementById('title').textContent=LABEL[page];document.getElementById('crumb').textContent=LABEL[page];document.getElementById('subtitle').textContent=({overview:'Your enforcement command centre',players:'Accounts and linked character histories',infractions:'Investigations and rule violations',punishments:'Warnings, kicks, and bans',appeals:'Punishment reviews and outcomes',activity:'Local demo activity history'})[page];document.getElementById('add').style.display=['overview','activity'].includes(page)?'none':'';let html='';if(page==='overview'){let active=data.punishments.filter(x=>x.status==='Active').length,pending=data.appeals.filter(x=>x.status==='Pending').length;html=`<div class="workspace-intro"><div><h2>Enforcement command centre</h2><p>Review incidents, manage player records and track disciplinary actions.</p></div><div class="intro-mark">⚔</div></div><div class="stats">${[['Players',data.players.length],['Infractions',data.infractions.length],['Active punishments',active],['Pending appeals',pending]].map(([k,v])=>`<div class="stat"><span>${k}</span><strong>${v}</strong></div>`).join('')}</div><div class="panel"><h2>Recent infractions</h2>${table(['Case','Player','Violation','Status'],data.infractions.slice(-6).reverse().map(x=>row(x.id,[esc(x.id),esc(player(x.player)),esc(x.type),badge(x.status)])))}</div>`}else if(page==='activity'){html=auditPanel()}else{let items=data[page];let statusOptions=page==='players'?[]:Array.from(new Set(items.map(x=>x.status).filter(Boolean)));let fields={players:['id','name','discord','characters','cases','punishments'],infractions:['id','player','type','severity','status','date'],punishments:['id','player','action','duration','status','date'],appeals:['id','player','punishment','status','reviewer']}[page];let names={id:'Record ID',name:'Player',discord:'Discord ID',characters:'Characters',player:'Player',type:'Rule Violated',severity:'Severity',status:'Status',date:'Date',action:'Punishment',duration:'Duration',punishment:'Linked punishment',reviewer:'Reviewer',cases:'Infractions',punishments:'Punishments'};let filtered=items.filter(x=>(statusFilter==='All'||x.status===statusFilter)&&Object.values(x).join(' ').toLowerCase().includes(filter.toLowerCase())||(statusFilter==='All'||x.status===statusFilter)&&player(x.player).toLowerCase().includes(filter.toLowerCase()));html=`<div class="viewbar"><div class="viewtabs"><button class="viewtab ${viewMode==='table'?'selected':''}" data-view="table">▤ &nbsp; Table</button><button class="viewtab ${viewMode==='board'?'selected':''}" data-view="board">▥ &nbsp; Board</button></div><span class="muted">${filtered.length} entries</span></div><div class="toolbar"><input class="search" id="search" placeholder="Search ${LABEL[page].toLowerCase()}…" value="${esc(filter)}">${statusOptions.length?`<select id="statusFilter"><option>All</option>${statusOptions.map(s=>`<option ${statusFilter===s?'selected':''}>${esc(s)}</option>`).join('')}</select>`:''}<span class="muted">${filtered.length} records</span></div>`+(viewMode==='table'?table(fields.map(f=>names[f]||f),filtered.map(x=>row(x.id,fields.map(f=>f==='player'?esc(player(x[f])):f==='cases'?data.infractions.filter(i=>i.player===x.id).length:f==='punishments'?data.punishments.filter(i=>i.player===x.id).length:f==='status'?badge(x[f]):esc(x[f]))))):`<div class="board">${(statusOptions.length?statusOptions:['All records']).map(st=>`<div class="board-col"><div class="board-title">${esc(st)} <span class="board-count">${filtered.filter(x=>!statusOptions.length||x.status===st).length}</span></div>${filtered.filter(x=>!statusOptions.length||x.status===st).map(x=>`<div class="board-card" data-record="${esc(x.id)}"><strong>${esc(x.name||x.type||x.action||x.id)}</strong><small>${esc(x.player?player(x.player):x.id)}</small><div style="margin-top:10px">${x.status?badge(x.status):''}</div></div>`).join('')||'<div class="muted">No records</div>'}</div>`).join('')}</div>`)}document.getElementById('content').innerHTML=html;document.querySelectorAll('[data-record]').forEach(tr=>tr.onclick=()=>openRecord(tr.dataset.record));document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{viewMode=b.dataset.view;render()});let search=document.getElementById('search');if(search)search.oninput=e=>{let start=e.target.selectionStart;filter=e.target.value;render();let s=document.getElementById('search');s.focus();s.setSelectionRange(start,start)};let sf=document.getElementById('statusFilter');if(sf)sf.onchange=e=>{statusFilter=e.target.value;render()}}
     const schemas={players:[['name','Player name','text'],['discord','Discord ID (17–20 digits)','text'],['characters','Character names (comma-separated)','text'],['notes','Internal notes','textarea']],infractions:[['player','Player','player'],['type','Rule Violated','text'],['severity','Severity','select:Low|Moderate|High|Critical'],['date','Incident date','date'],['officer','Reporting officer','text'],['status','Status','select:Open|Investigating|Resolved|Dismissed'],['description','Incident description','textarea'],['evidence','Evidence Links (one per line)','textarea']],punishments:[['player','Player','player'],['infraction','Linked infraction ID','text'],['action','Action','select:Verbal Warning|Written Warning|Kick|Temporary Ban|Permanent Ban|Other'],['duration','Duration / notes','text'],
 ['expiresAt','Expiry date (temporary bans only)','date'],['status','Status','select:Active|Expired|Revoked'],['officer','Issuing officer','text'],['date','Issued date','date'],['notes','Reason / notes','textarea']],appeals:[['player','Player','player'],['punishment','Punishment ID','text'],['status','Status','select:Pending|Under Review|Approved|Denied'],['reviewer','Reviewer (not original issuing officer)','text'],['reason','Appeal statement','textarea'],['decision','Decision and reasoning','textarea']]};
     
@@ -970,7 +1045,13 @@
     
     function fieldHTML([key,label,type],value){let inner='';if(type==='textarea')inner=`<textarea name="${key}" rows="3">${esc(value)}</textarea>`;else if(type==='player')inner=`<select name="${key}" required><option value="">Choose player</option>${data.players.map(p=>`<option value="${esc(p.id)}" ${value===p.id?'selected':''}>${esc(p.name)} (${esc(p.id)})</option>`).join('')}</select>`;else if(type.startsWith('select:'))inner=`<select name="${key}">${type.slice(7).split('|').map(o=>`<option ${o===value?'selected':''}>${esc(o)}</option>`).join('')}</select>`;else inner=`<input name="${key}" type="${type}" value="${esc(value)}" ${(key === 'name' || (page === 'infractions' && key === 'type')) ? 'required' : ''}>`;return `<div class="field ${type==='textarea'?'full':''}"><label>${esc(label)}</label>${inner}</div>`}
     
-    function edit(record){let existing=!!record;let schema=schemas[page];modal((existing?'Edit ':'New ')+LABEL[page].replace(/s$/,''),`<form id="recordForm"><div class="formgrid">${schema.map(f=>fieldHTML(f,record?.[f[0]]??(f[0]==='date'?new Date().toISOString().slice(0,10):''))).join('')}</div><div class="actions"><button type="button" class="secondary" id="cancel">Cancel</button><button class="primary" type="submit">Save record</button></div></form>`);document.getElementById('cancel').onclick=close;document.getElementById('recordForm').onsubmit=e=>{e.preventDefault();let form=new FormData(e.target),obj=Object.fromEntries(form.entries());
+    function edit(record){let existing=!!record;let schema=schemas[page];modal((existing?'Edit ':'New ')+LABEL[page].replace(/s$/,''),`<form id="recordForm"><div class="formgrid">${schema.map(f=>fieldHTML(f,record?.[f[0]]??(f[0]==='date'?new Date().toISOString().slice(0,10):''))).join('')}</div><div class="actions"><button type="button" class="secondary" id="cancel">Cancel</button><button class="primary" type="submit">Save record</button></div></form>`);document.getElementById('cancel').onclick=close;document.getElementById('recordForm').onsubmit=e=>{e.preventDefault();let form = new FormData(e.target);
+let obj = Object.fromEntries(form.entries());
+
+// Capture the original values before editing.
+const previousRecord = existing
+    ? structuredClone(record)
+    : null;
         if(page==='players'){
           obj.name=obj.name.trim();obj.discord=obj.discord.trim();
           if(!obj.name){alert('Enter a player name.');return;}
@@ -979,7 +1060,14 @@
             alert('This Discord ID already belongs to another player profile.');return;
           }
         }
-        let prefix={players:'P',infractions:'INF',punishments:'PUN',appeals:'APP'}[page];obj.id=record?.id||prefix+'-'+String(Math.max(0,...data[page].map(x=>Number(x.id.split('-')[1])||0))+1).padStart(3,'0');if(page==='appeals'&&obj.status==='Approved'&&obj.punishment){let p=data.punishments.find(x=>x.id===obj.punishment);if(p)p.status='Revoked'}if(existing){Object.assign(record,obj)}else data[page].push(obj);data.activity.push({id:'LOG-'+Date.now(),time:new Date().toLocaleString(),action:existing?'Record edited':'Record created',details:`${page}: ${obj.id}`});save();close();render()}}
+        let prefix={players:'P',infractions:'INF',punishments:'PUN',appeals:'APP'}[page];obj.id=record?.id||prefix+'-'+String(Math.max(0,...data[page].map(x=>Number(x.id.split('-')[1])||0))+1).padStart(3,'0');if(page==='appeals'&&obj.status==='Approved'&&obj.punishment){let p=data.punishments.find(x=>x.id===obj.punishment);if(p)p.status='Revoked'}if(existing){Object.assign(record,obj)}else data[page].push(obj);logAudit(
+    existing ? 'Record edited' : 'Record created',
+    page,
+    obj.id,
+    previousRecord,
+    obj,
+    `${LABEL[page]}: ${obj.id}`
+);save();close();render()}}
    // =====================================================
 // ISSUE PUNISHMENT DIRECTLY FROM AN INFRACTION
 // =====================================================
@@ -1665,7 +1753,263 @@ if (section === 'punishments') {
         });
     }
 }
-    
+    // =====================================================
+// VENGEFUL REALMS - ENFORCEMENT AUDIT LOG
+// =====================================================
+
+let auditSearch = '';
+let auditFilter = 'All';
+
+// Record a new audit event.
+function logAudit(action, section, recordId, before, after, details = '') {
+
+    const changes = [];
+
+    if (before && after) {
+        const keys = new Set([
+            ...Object.keys(before),
+            ...Object.keys(after)
+        ]);
+
+        keys.forEach(key => {
+            if (key === 'id') return;
+
+            const oldValue = String(before[key] ?? '');
+            const newValue = String(after[key] ?? '');
+
+            if (oldValue !== newValue) {
+                changes.push({
+                    field: key,
+                    before: oldValue,
+                    after: newValue
+                });
+            }
+        });
+    }
+
+    const entry = {
+        id: 'AUD-' + Date.now() + '-' +
+            Math.random().toString(36).slice(2, 8),
+
+        time: new Date().toISOString(),
+        action: action,
+        section: section,
+        recordId: recordId,
+        actor: 'Unverified browser user',
+        details: details,
+        changes: changes
+    };
+
+    data.activity.push(entry);
+    save();
+
+    return entry;
+}
+
+// Format audit dates for display.
+function auditDate(value) {
+    const date = new Date(value);
+
+    return Number.isNaN(date.getTime())
+        ? String(value || 'Unknown')
+        : date.toLocaleString();
+}
+
+// Build the audit dashboard.
+function auditPanel() {
+
+    const entries = data.activity || [];
+
+    const created = entries.filter(x =>
+        /created|issued/i.test(x.action)
+    ).length;
+
+    const edited = entries.filter(x =>
+        /edited|updated/i.test(x.action)
+    ).length;
+
+    const reversed = entries.filter(x =>
+        /revoked|expired/i.test(x.action)
+    ).length;
+
+    const actions = [
+        'All',
+        ...new Set(entries.map(x => x.action).filter(Boolean))
+    ];
+
+    const filtered = entries.filter(entry => {
+
+        const matchesAction =
+            auditFilter === 'All' ||
+            entry.action === auditFilter;
+
+        const searchable = [
+            entry.id,
+            entry.action,
+            entry.section,
+            entry.recordId,
+            entry.actor,
+            entry.details,
+            JSON.stringify(entry.changes || [])
+        ].join(' ').toLowerCase();
+
+        return matchesAction &&
+            searchable.includes(auditSearch.toLowerCase());
+    });
+
+    const rows = filtered.slice().reverse().map(entry => {
+
+        const target = entry.recordId ||
+            entry.details ||
+            'Unknown';
+
+        return `
+            <tr class="audit-record"
+                data-audit="${esc(entry.id)}">
+
+                <td>${esc(auditDate(entry.time))}</td>
+
+                <td>${badge(entry.action || 'Unknown')}</td>
+
+                <td>${esc(entry.section || 'Legacy entry')}</td>
+
+                <td>${esc(target)}</td>
+
+                <td>${esc(entry.actor || 'Unverified')}</td>
+
+            </tr>
+        `;
+    });
+
+    return `
+        <div class="audit-heading">
+            <h2>Enforcement Audit Log</h2>
+            <p class="muted">
+                Review recorded changes and disciplinary actions.
+                Staff identity is not authenticated in demo mode.
+            </p>
+        </div>
+
+        <div class="audit-summary">
+
+            <div class="audit-stat">
+                <span>Total Events</span>
+                <strong>${entries.length}</strong>
+            </div>
+
+            <div class="audit-stat">
+                <span>Created / Issued</span>
+                <strong>${created}</strong>
+            </div>
+
+            <div class="audit-stat">
+                <span>Edited / Updated</span>
+                <strong>${edited}</strong>
+            </div>
+
+        </div>
+
+        <p class="muted" style="margin-bottom:15px">
+            ${reversed} recorded revocation or expiry events
+        </p>
+
+        <div class="audit-controls">
+
+            <input
+                id="auditSearch"
+                placeholder="Search audit history..."
+                value="${esc(auditSearch)}"
+            >
+
+            <select id="auditFilter">
+                ${actions.map(action => `
+                    <option value="${esc(action)}"
+                        ${auditFilter === action ? 'selected' : ''}>
+                        ${esc(action)}
+                    </option>
+                `).join('')}
+            </select>
+
+        </div>
+
+        <p class="muted" style="margin-bottom:12px">
+            ${filtered.length} matching events
+        </p>
+
+        ${table(
+            ['Timestamp', 'Action', 'Database', 'Record', 'Actor'],
+            rows
+        )}
+    `;
+}
+
+// Show the complete audit entry.
+function openAuditEntry(id) {
+
+    const entry = data.activity.find(x => x.id === id);
+
+    if (!entry) return;
+
+    const changes = (entry.changes || []).map(change => `
+        <div class="record">
+            <span class="key">${esc(change.field)}</span>
+
+            <p class="audit-detail">
+                Before: ${esc(change.before || '(empty)')}
+            </p>
+
+            <p class="audit-detail">
+                After: ${esc(change.after || '(empty)')}
+            </p>
+        </div>
+    `).join('');
+
+    modal('Audit Event — ' + entry.id, `
+        <div class="record">
+            <span class="key">Action</span>
+            <p>${esc(entry.action)}</p>
+        </div>
+
+        <div class="record">
+            <span class="key">Timestamp</span>
+            <p>${esc(auditDate(entry.time))}</p>
+        </div>
+
+        <div class="record">
+            <span class="key">Database</span>
+            <p>${esc(entry.section || 'Legacy entry')}</p>
+        </div>
+
+        <div class="record">
+            <span class="key">Record ID</span>
+            <p>${esc(entry.recordId || 'Not recorded')}</p>
+        </div>
+
+        <div class="record">
+            <span class="key">Actor</span>
+            <p>${esc(entry.actor || 'Unverified')}</p>
+        </div>
+
+        <div class="record">
+            <span class="key">Details</span>
+            <p class="audit-detail">
+                ${esc(entry.details || 'No additional details')}
+            </p>
+        </div>
+
+        <h3>Recorded Changes</h3>
+
+        ${changes || '<p class="muted">No field-level changes recorded.</p>'}
+
+        <div class="actions">
+            <button class="secondary" id="auditClose">
+                Close
+            </button>
+        </div>
+    `);
+
+    document.getElementById('auditClose').onclick = close;
+}
     function close(){document.getElementById('modalback').classList.remove('show')}document.getElementById('close').onclick=close;document.getElementById('modalback').onclick=e=>{if(e.target.id==='modalback')close()};document.getElementById('add').onclick=()=>edit(null);document.getElementById('export').onclick=()=>{let blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='vengeful-realms-demo-export.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};document.getElementById('mobileToggle').onclick=()=>document.body.classList.toggle('sidebar-open');
 
    // =====================================================
@@ -1982,7 +2326,44 @@ updatePunishmentStatuses();
 setInterval(() => {
     updatePunishmentStatuses();
 }, 60000);
+// =====================================================
+// AUDIT DASHBOARD EVENT HANDLERS
+// =====================================================
 
+document.getElementById('content').addEventListener('input', event => {
+
+    if (event.target.id !== 'auditSearch') return;
+
+    auditSearch = event.target.value;
+
+    const cursor = event.target.selectionStart;
+
+    render();
+
+    const input = document.getElementById('auditSearch');
+
+    if (input) {
+        input.focus();
+        input.setSelectionRange(cursor, cursor);
+    }
+});
+
+document.getElementById('content').addEventListener('change', event => {
+
+    if (event.target.id !== 'auditFilter') return;
+
+    auditFilter = event.target.value;
+    render();
+});
+
+document.getElementById('content').addEventListener('click', event => {
+
+    const record = event.target.closest('[data-audit]');
+
+    if (record) {
+        openAuditEntry(record.dataset.audit);
+    }
+});
 // Render the workspace.
 render();
 
