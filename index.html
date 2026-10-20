@@ -2861,139 +2861,29 @@ function showEnhancedInfractionCase(caseId) {
         `;
 
     const html = `
+    <section class="ow-panel">
 
-        <div class="casefile">
-
-            <div class="casefile-header">
-
-                <span class="casefile-kicker">
-                    ENFORCEMENT CASE FILE
-                </span>
-
-                <h2>${esc(rec.id)}</h2>
-
-                <div class="casefile-subtitle">
-                    ${esc(player(rec.player))}
-                    · ${esc(rec.type || 'Rule violation')}
-                </div>
-
-                <div style="margin-top:14px">
-                    ${badge(rec.status || 'Unknown')}
-                    ${badge(rec.severity || 'Unknown')}
-                </div>
-
+        <div class="ow-heading">
+            <div>
+                <h2>Officer Workload & Assignments</h2>
+                <p>
+                    Review active investigations and distribute
+                    unassigned cases.
+                </p>
             </div>
-
-
-            <div class="casefile-meta">
-
-                ${property('Player', player(rec.player))}
-
-                ${property('Rule Violated', rec.type)}
-
-                ${property('Reporting Officer', rec.officer)}
-
-                ${property('Incident Date', rec.date)}
-
-            </div>
-
-
-            <section class="casefile-section">
-
-                <h3>Incident Description</h3>
-
-                <div class="casefile-notes">
-                    ${esc(rec.description || 'No description recorded.')}
-                </div>
-
-            </section>
-
-            ${renderInvestigationWorkflow(rec)}
-
-
-            <section class="casefile-section">
-
-                <h3>Investigation Notes</h3>
-
-                <div class="casefile-notes">
-                    ${esc(rec.investigationNotes || 'No investigation notes recorded.')}
-                </div>
-
-            </section>
-
-
-            <section class="casefile-section">
-
-                <h3>Evidence</h3>
-
-                <div class="casefile-notes">
-                    ${evidenceLinks || 'No evidence recorded.'}
-                </div>
-
-            </section>
-
-
-            <section class="casefile-section">
-
-                <h3>
-                    Linked Punishments
-                    (${linkedPunishments.length})
-                </h3>
-
-                ${punishmentHTML}
-
-            </section>
-
-
-            <section class="casefile-section">
-
-                <h3>Case Timeline</h3>
-
-                <div class="casefile-timeline">
-                    ${timelineHTML}
-                </div>
-
-            </section>
-
-
-            <div class="casefile-actions">
-
-                <button
-                    type="button"
-                    class="secondary"
-                    id="casefileClose"
-                >
-                    Close
-                </button>
-
-                <button
-                    type="button"
-                    class="secondary"
-                    id="casefilePlayer"
-                >
-                    View Player
-                </button>
-
-                <button
-                    type="button"
-                    class="primary"
-                    id="casefileEdit"
-                >
-                    Edit Case
-                </button>
-
-                <button
-                    type="button"
-                    class="primary"
-                    id="casefilePunishment"
-                >
-                    ⚖ Issue Punishment
-                </button>
-
-            </div>
-
         </div>
-    `;
+
+        <div class="ow-grid">
+            ${officerCards}
+        </div>
+
+        <div class="ow-queue">
+            <h3>Unassigned Investigations</h3>
+            ${unassignedHTML}
+        </div>
+
+    </section>
+`;
 
     modal('Infraction Case — ' + rec.id, html);
 
@@ -5466,13 +5356,7 @@ const assignableStaff = data.staff.filter(member =>
 // -----------------------------------------------------
 
 function assignInvestigationOfficer(caseId, officerName) {
-// Link the assignment to a Staff Directory record where possible.
-const matchingStaff = data.staff.find(member =>
-    member.name.toLowerCase() === name.toLowerCase() &&
-    member.status === 'Active'
-);
 
-rec.assignedOfficerId = matchingStaff?.id || '';
     const rec = data.infractions.find(
         item => item.id === caseId
     );
@@ -5483,31 +5367,31 @@ rec.assignedOfficerId = matchingStaff?.id || '';
     }
 
     if (investigationStageFor(rec) === 'Closed') {
-        alert('Closed investigations cannot be assigned here.');
+        alert('Closed investigations cannot be assigned.');
         return;
     }
 
     const name = String(officerName || '').trim();
 
-    if (!name) {
-        alert('Please select an officer.');
-        return;
-    }
+    const matchingStaff = data.staff.find(member =>
+        member.name.toLowerCase() === name.toLowerCase() &&
+        member.status === 'Active' &&
+        (
+            member.role === 'Enforcement Officer' ||
+            member.role === 'Enforcement Captain'
+        )
+    );
 
-    if (name.length > 100) {
-        alert('Officer name is too long.');
-        return;
-    }
-
-    if (rec.assignedOfficer === name) {
+    if (!matchingStaff) {
+        alert('Please select an active officer from the Staff Directory.');
         return;
     }
 
     const previous = structuredClone(rec);
 
-    rec.assignedOfficer = name;
+    rec.assignedOfficer = matchingStaff.name;
+    rec.assignedOfficerId = matchingStaff.id;
 
-    // Move newly reported cases to Assigned.
     if (
         !rec.investigationStage ||
         rec.investigationStage === 'Reported'
@@ -5515,9 +5399,7 @@ rec.assignedOfficerId = matchingStaff?.id || '';
         rec.investigationStage = 'Assigned';
     }
 
-    // Record the assignment using the existing audit system.
     if (typeof logAudit === 'function') {
-
         logAudit(
             'Officer assigned',
             'infractions',
@@ -5526,17 +5408,6 @@ rec.assignedOfficerId = matchingStaff?.id || '';
             structuredClone(rec),
             'Assigned ' + rec.id + ' to ' + name
         );
-
-    } else {
-
-        data.activity.push({
-            id: 'LOG-' + Date.now(),
-            time: new Date().toLocaleString(),
-            action: 'Officer assigned',
-            section: 'infractions',
-            recordId: rec.id,
-            details: 'Assigned ' + rec.id + ' to ' + name
-        });
     }
 
     save();
