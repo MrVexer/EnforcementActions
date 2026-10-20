@@ -3054,15 +3054,16 @@ function openRecord(id){
     const rec = data[section]?.find(item => item.id === id);
 
    // Open the enhanced case profile for infractions.
+if (!rec) {
+    alert('Record not found.');
+    return;
+}
+
+// Open the enhanced case profile for infractions.
 if (section === 'infractions') {
     showEnhancedInfractionCase(rec.id);
     return;
 }
- 
-    if (!rec) {
-        alert('Record not found.');
-        return;
-    }
 
     const originalPage = page;
     page = section;
@@ -5582,11 +5583,6 @@ document.getElementById('content').addEventListener(
         if (!select) return;
 
         let officerName = select.value;
-
-            if (entered === null) return;
-
-            officerName = entered.trim();
-        }
 
         if (!officerName) {
             alert('Please select or enter an officer.');
