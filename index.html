@@ -1256,6 +1256,137 @@
     filter: brightness(1.12);
     transition: filter .15s ease;
 }
+
+   /* ==========================================
+   VENGEFUL REALMS - NOTIFICATION CENTRE
+========================================== */
+
+.vr-notify-wrap {
+    position: relative;
+}
+
+.vr-notify-bell {
+    position: relative;
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    border: 1px solid #49343b;
+    border-radius: 10px;
+    background: #292126;
+    color: white;
+    cursor: pointer;
+    font-size: 19px;
+}
+
+.vr-notify-bell:hover {
+    background: #452630;
+    border-color: #c73750;
+}
+
+.vr-notify-count {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 4px;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    background: #d12e47;
+    color: white;
+    font-size: 10px;
+    font-weight: 800;
+}
+
+.vr-notify-count[hidden],
+.vr-notify-panel[hidden] {
+    display: none !important;
+}
+
+.vr-notify-panel {
+    position: absolute;
+    z-index: 100;
+    top: calc(100% + 12px);
+    right: 0;
+    width: min(380px, calc(100vw - 30px));
+    max-height: 460px;
+    overflow-y: auto;
+    background: #211e22;
+    border: 1px solid #59343f;
+    border-radius: 12px;
+    box-shadow: 0 18px 45px #0009;
+}
+
+.vr-notify-heading {
+    position: sticky;
+    top: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 17px;
+    background: #292027;
+    border-bottom: 1px solid #49333b;
+}
+
+.vr-notify-heading strong {
+    color: #fff;
+    font-size: 14px;
+}
+
+.vr-notify-heading span {
+    color: #b9abb2;
+    font-size: 11px;
+}
+
+.vr-notify-item {
+    display: block;
+    width: 100%;
+    padding: 15px 17px;
+    border: 0;
+    border-bottom: 1px solid #393037;
+    background: transparent;
+    color: #f5edf0;
+    text-align: left;
+    cursor: pointer;
+}
+
+.vr-notify-item:hover {
+    background: #38262e;
+}
+
+.vr-notify-item strong {
+    display: block;
+    font-size: 13px;
+    margin-bottom: 5px;
+}
+
+.vr-notify-item small {
+    display: block;
+    color: #b4a9b0;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.vr-notify-empty {
+    padding: 24px 17px;
+    text-align: center;
+    color: #aaa1a9;
+}
+
+.vr-notify-critical {
+    border-left: 3px solid #d74458;
+}
+
+.vr-notify-warning {
+    border-left: 3px solid #d9a04b;
+}
+
+.vr-notify-info {
+    border-left: 3px solid #649dd6;
+}
    
     /* Player profile: Notion-style linked database page */
     .profile-heading{display:flex;align-items:center;gap:15px;margin-bottom:22px}
@@ -1306,6 +1437,34 @@
      </div>
     </div>
     <div class="topbar-right">
+     <div class="vr-notify-wrap" id="vrNotifyWrap">
+
+    <button
+        type="button"
+        class="vr-notify-bell"
+        id="vrNotifyBell"
+        aria-label="Open notifications"
+        aria-expanded="false"
+        aria-controls="vrNotifyPanel"
+    >
+        🔔
+        <span class="vr-notify-count" id="vrNotifyCount" hidden>0</span>
+    </button>
+
+    <div
+        class="vr-notify-panel"
+        id="vrNotifyPanel"
+        hidden
+    >
+        <div class="vr-notify-heading">
+            <strong>Notification Centre</strong>
+            <span id="vrNotifySummary">No alerts</span>
+        </div>
+
+        <div id="vrNotifyItems"></div>
+    </div>
+
+</div>
      <span class="top-chip">
       ● DEMO MODE
      </span>
@@ -3215,6 +3374,276 @@ document.getElementById('content').addEventListener(
         }
     }
 );
+
+   // =====================================================
+// VENGEFUL REALMS - NOTIFICATION CENTRE
+// =====================================================
+
+function getEnforcementNotifications() {
+
+    const notifications = [];
+
+    // Start of today in the browser's local timezone.
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Open and investigating cases.
+    data.infractions.forEach(item => {
+
+        if (!['Open', 'Investigating'].includes(item.status)) {
+            return;
+        }
+
+        notifications.push({
+            section: 'infractions',
+            id: item.id,
+            title: item.status === 'Investigating'
+                ? 'Investigation in progress'
+                : 'Open infraction',
+            description:
+                item.id + ' · ' +
+                player(item.player) + ' · ' +
+                (item.type || 'Rule violation'),
+            level: 'info'
+        });
+    });
+
+    // Pending appeals.
+    data.appeals.forEach(item => {
+
+        if (item.status !== 'Pending') return;
+
+        notifications.push({
+            section: 'appeals',
+            id: item.id,
+            title: 'Appeal awaiting review',
+            description:
+                item.id + ' · ' + player(item.player),
+            level: 'warning'
+        });
+    });
+
+    // Temporary ban expiry warnings.
+    data.punishments.forEach(item => {
+
+        if (
+            item.action !== 'Temporary Ban' ||
+            item.status !== 'Active'
+        ) {
+            return;
+        }
+
+        if (!item.expiresAt) {
+
+            notifications.push({
+                section: 'punishments',
+                id: item.id,
+                title: 'Missing punishment expiry',
+                description:
+                    item.id + ' · ' +
+                    player(item.player) +
+                    ' · No expiry date recorded',
+                level: 'critical'
+            });
+
+            return;
+        }
+
+        // Validate the date before calculating days.
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(item.expiresAt)) {
+            return;
+        }
+
+        const expiry = new Date(
+            item.expiresAt + 'T00:00:00'
+        );
+
+        if (Number.isNaN(expiry.getTime())) return;
+
+        const daysRemaining = Math.round(
+            (expiry.getTime() - today.getTime()) /
+            86400000
+        );
+
+        if (daysRemaining >= 0 && daysRemaining <= 3) {
+
+            notifications.push({
+                section: 'punishments',
+                id: item.id,
+                title: 'Temporary ban expiring',
+                description:
+                    item.id + ' · ' +
+                    player(item.player) +
+                    ' · ' +
+                    (
+                        daysRemaining === 0
+                            ? 'Expires today'
+                            : 'Expires in ' +
+                              daysRemaining +
+                              ' day(s)'
+                    ),
+                level: 'warning'
+            });
+        }
+    });
+
+    // Critical alerts first.
+    const priority = {
+        critical: 0,
+        warning: 1,
+        info: 2
+    };
+
+    notifications.sort(
+        (a, b) => priority[a.level] - priority[b.level]
+    );
+
+    return notifications;
+}
+
+
+// -----------------------------------------------------
+// UPDATE NOTIFICATION DISPLAY
+// -----------------------------------------------------
+
+function renderNotificationCentre() {
+
+    const count = document.getElementById('vrNotifyCount');
+    const summary = document.getElementById('vrNotifySummary');
+    const items = document.getElementById('vrNotifyItems');
+
+    if (!count || !summary || !items) return;
+
+    const notifications = getEnforcementNotifications();
+
+    count.textContent =
+        notifications.length > 99
+            ? '99+'
+            : notifications.length;
+
+    count.hidden = notifications.length === 0;
+
+    summary.textContent =
+        notifications.length + ' alert(s)';
+
+    if (!notifications.length) {
+
+        items.innerHTML = `
+            <div class="vr-notify-empty">
+                ✓ No outstanding alerts
+            </div>
+        `;
+
+        return;
+    }
+
+    items.innerHTML = notifications.map((item, index) => `
+
+        <button
+            type="button"
+            class="vr-notify-item vr-notify-${item.level}"
+            data-notify-index="${index}"
+        >
+            <strong>${esc(item.title)}</strong>
+            <small>${esc(item.description)}</small>
+        </button>
+
+    `).join('');
+
+    // Attach handlers to the current notification records.
+    items.querySelectorAll('[data-notify-index]').forEach(
+        button => {
+
+            button.onclick = () => {
+
+                const item = notifications[
+                    Number(button.dataset.notifyIndex)
+                ];
+
+                if (!item) return;
+
+                document.getElementById('vrNotifyPanel')
+                    .hidden = true;
+
+                document.getElementById('vrNotifyBell')
+                    .setAttribute('aria-expanded', 'false');
+
+                page = item.section;
+                filter = '';
+                statusFilter = 'All';
+                viewMode = 'table';
+
+                render();
+
+                openRecord(item.id);
+            };
+        }
+    );
+}
+
+
+// -----------------------------------------------------
+// OPEN / CLOSE NOTIFICATION PANEL
+// -----------------------------------------------------
+
+const notifyBell = document.getElementById('vrNotifyBell');
+const notifyPanel = document.getElementById('vrNotifyPanel');
+
+notifyBell.addEventListener('click', event => {
+
+    event.stopPropagation();
+
+    const opening = notifyPanel.hidden;
+
+    notifyPanel.hidden = !opening;
+
+    notifyBell.setAttribute(
+        'aria-expanded',
+        String(opening)
+    );
+
+    if (opening) {
+        renderNotificationCentre();
+    }
+});
+
+// Close when clicking outside the panel.
+document.addEventListener('click', event => {
+
+    if (!event.target.closest('#vrNotifyWrap')) {
+        notifyPanel.hidden = true;
+        notifyBell.setAttribute('aria-expanded', 'false');
+    }
+});
+
+// Close using Escape.
+document.addEventListener('keydown', event => {
+
+    if (event.key === 'Escape') {
+        notifyPanel.hidden = true;
+        notifyBell.setAttribute('aria-expanded', 'false');
+    }
+});
+
+
+// -----------------------------------------------------
+// KEEP NOTIFICATIONS UP TO DATE
+// -----------------------------------------------------
+
+// Preserve existing render functionality.
+const renderBeforeNotifications = render;
+
+render = function () {
+
+    renderBeforeNotifications();
+
+    renderNotificationCentre();
+};
+
+// Refresh notification counts periodically.
+setInterval(() => {
+    renderNotificationCentre();
+}, 60000);
 // Render the workspace.
 render();
 
