@@ -746,7 +746,108 @@
         grid-template-columns: 1fr;
     }
 }
-  
+
+    /* ==========================================
+   PUNISHMENT MANAGEMENT DASHBOARD
+========================================== */
+
+.pm-dashboard {
+    margin-bottom: 22px;
+}
+
+.pm-heading {
+    margin-bottom: 18px;
+}
+
+.pm-heading h2 {
+    margin: 0 0 6px;
+    font-size: 20px;
+}
+
+.pm-stats {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.pm-stat {
+    background: #1c1c1f;
+    border: 1px solid #343438;
+    border-radius: 10px;
+    padding: 18px;
+    border-top: 3px solid #c7273a;
+}
+
+.pm-stat span {
+    display: block;
+    color: #a8a5ad;
+    font-size: 12px;
+    margin-bottom: 10px;
+}
+
+.pm-stat strong {
+    font-size: 27px;
+    color: #f5f1f2;
+}
+
+.pm-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.pm-filter {
+    padding: 9px 13px;
+    border: 1px solid #39363b;
+    background: #222124;
+    color: #bcb6ba;
+    border-radius: 7px;
+    cursor: pointer;
+}
+
+.pm-filter:hover {
+    background: #34252a;
+    color: white;
+}
+
+.pm-filter.selected {
+    background: #692430;
+    border-color: #d32b3e;
+    color: white;
+}
+
+.pm-id {
+    color: #f16a7c;
+    font-weight: 700;
+}
+
+.pm-expired {
+    color: #f2b86d;
+}
+
+.pm-revoked {
+    color: #a8a5ad;
+}
+
+.pm-permanent {
+    color: #f16a7c;
+    font-weight: 600;
+}
+
+@media (max-width: 1100px) {
+    .pm-stats {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 650px) {
+    .pm-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+   
     /* Player profile: Notion-style linked database page */
     .profile-heading{display:flex;align-items:center;gap:15px;margin-bottom:22px}
     .profile-heading h2{margin:0 0 5px}
@@ -1565,7 +1666,316 @@ if (section === 'punishments') {
     }
 }
     
-    function close(){document.getElementById('modalback').classList.remove('show')}document.getElementById('close').onclick=close;document.getElementById('modalback').onclick=e=>{if(e.target.id==='modalback')close()};document.getElementById('add').onclick=()=>edit(null);document.getElementById('export').onclick=()=>{let blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='vengeful-realms-demo-export.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};document.getElementById('mobileToggle').onclick=()=>document.body.classList.toggle('sidebar-open');// Check punishment expiry when the workspace loads.
+    function close(){document.getElementById('modalback').classList.remove('show')}document.getElementById('close').onclick=close;document.getElementById('modalback').onclick=e=>{if(e.target.id==='modalback')close()};document.getElementById('add').onclick=()=>edit(null);document.getElementById('export').onclick=()=>{let blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='vengeful-realms-demo-export.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};document.getElementById('mobileToggle').onclick=()=>document.body.classList.toggle('sidebar-open');
+
+   // =====================================================
+// PUNISHMENT MANAGEMENT DASHBOARD
+// =====================================================
+
+// Current quick-filter selection.
+let punishmentQuickFilter = 'All';
+
+// Keep a reference to the original workspace renderer.
+const originalWorkspaceRender = render;
+
+// Extend the existing render function.
+render = function () {
+
+    // Keep the existing page rendering.
+    originalWorkspaceRender();
+
+    // Only show this dashboard on the Punishments page.
+    if (page !== 'punishments') {
+        punishmentQuickFilter = 'All';
+        return;
+    }
+
+    renderPunishmentManagement();
+};
+
+
+// -----------------------------------------------------
+// BUILD PUNISHMENT MANAGEMENT PANEL
+// -----------------------------------------------------
+
+function renderPunishmentManagement() {
+
+    const container = document.getElementById('content');
+
+    if (!container) return;
+
+    const punishments = data.punishments;
+
+    // Calculate statistics from the current records.
+    const stats = {
+        total: punishments.length,
+
+        active: punishments.filter(
+            p => p.status === 'Active'
+        ).length,
+
+        expired: punishments.filter(
+            p => p.status === 'Expired'
+        ).length,
+
+        revoked: punishments.filter(
+            p => p.status === 'Revoked'
+        ).length,
+
+        permanent: punishments.filter(
+            p => p.action === 'Permanent Ban'
+        ).length
+    };
+
+    const filters = [
+        'All',
+        'Active',
+        'Expired',
+        'Revoked',
+        'Permanent Ban'
+    ];
+
+    // -------------------------------------------------
+    // DASHBOARD HTML
+    // -------------------------------------------------
+
+    const dashboardHTML = `
+        <div class="pm-dashboard">
+
+            <div class="pm-heading">
+                <h2>⚖ Punishment Management</h2>
+
+                <p class="muted">
+                    Monitor active disciplinary actions,
+                    track expiry dates and review
+                    punishment history.
+                </p>
+            </div>
+
+            <div class="pm-stats">
+
+                <div class="pm-stat">
+                    <span>Total Punishments</span>
+                    <strong>${stats.total}</strong>
+                </div>
+
+                <div class="pm-stat">
+                    <span>Active</span>
+                    <strong>${stats.active}</strong>
+                </div>
+
+                <div class="pm-stat">
+                    <span>Expired</span>
+                    <strong>${stats.expired}</strong>
+                </div>
+
+                <div class="pm-stat">
+                    <span>Revoked</span>
+                    <strong>${stats.revoked}</strong>
+                </div>
+
+                <div class="pm-stat">
+                    <span>Permanent Bans</span>
+                    <strong>${stats.permanent}</strong>
+                </div>
+
+            </div>
+
+            <div class="pm-filters">
+
+                ${filters.map(name => `
+                    <button
+                        type="button"
+                        class="pm-filter ${
+                            punishmentQuickFilter === name
+                                ? 'selected'
+                                : ''
+                        }"
+                        data-pm-filter="${esc(name)}"
+                    >
+                        ${esc(name)}
+                    </button>
+                `).join('')}
+
+            </div>
+
+        </div>
+    `;
+
+    container.insertAdjacentHTML(
+        'afterbegin',
+        dashboardHTML
+    );
+
+    // -------------------------------------------------
+    // FILTER BUTTON EVENTS
+    // -------------------------------------------------
+
+    container.querySelectorAll(
+        '[data-pm-filter]'
+    ).forEach(button => {
+
+        button.onclick = () => {
+
+            punishmentQuickFilter =
+                button.dataset.pmFilter;
+
+            // Quick filters use the detailed table view.
+            viewMode = 'table';
+
+            render();
+        };
+
+    });
+
+    // -------------------------------------------------
+    // DETAILED PUNISHMENT TABLE
+    // -------------------------------------------------
+
+    if (viewMode !== 'table') return;
+
+    const matching = punishments.filter(p => {
+
+        // Respect the existing search box.
+        const searchMatch =
+            Object.values(p)
+                .join(' ')
+                .toLowerCase()
+                .includes(filter.toLowerCase()) ||
+
+            player(p.player)
+                .toLowerCase()
+                .includes(filter.toLowerCase());
+
+        // Respect the existing status dropdown.
+        const statusMatch =
+            statusFilter === 'All' ||
+            p.status === statusFilter;
+
+        // Apply the new quick filter.
+        const quickMatch =
+            punishmentQuickFilter === 'All' ||
+
+            (
+                punishmentQuickFilter === 'Permanent Ban'
+                    ? p.action === 'Permanent Ban'
+                    : p.status === punishmentQuickFilter
+            );
+
+        return searchMatch && statusMatch && quickMatch;
+    });
+
+    const rows = matching.map(p => {
+
+        // Format expiry information.
+        let expiry = '—';
+
+        if (p.action === 'Permanent Ban') {
+
+            expiry = `
+                <span class="pm-permanent">
+                    Never
+                </span>
+            `;
+
+        } else if (p.expiresAt) {
+
+            expiry = esc(p.expiresAt);
+
+            if (p.status === 'Expired') {
+                expiry = `
+                    <span class="pm-expired">
+                        ${esc(p.expiresAt)}
+                    </span>
+                `;
+            }
+
+        } else if (p.action === 'Temporary Ban') {
+
+            expiry = `
+                <span class="pm-expired">
+                    Not set
+                </span>
+            `;
+        }
+
+        return row(p.id, [
+
+            `<span class="pm-id">${esc(p.id)}</span>`,
+
+            esc(player(p.player)),
+
+            esc(p.action || 'Unknown'),
+
+            p.status
+                ? badge(p.status)
+                : badge('Unknown'),
+
+            expiry,
+
+            esc(p.infraction || 'Not linked'),
+
+            esc(p.officer || 'Not recorded'),
+
+            esc(p.date || 'Not recorded')
+
+        ]);
+
+    });
+
+    const detailedTable = table(
+        [
+            'Punishment ID',
+            'Player',
+            'Action',
+            'Status',
+            'Expiry Date',
+            'Linked Case',
+            'Issued By',
+            'Issued Date'
+        ],
+        rows
+    );
+
+    // Replace only the Punishments table, not the page.
+    const existingTable =
+        container.querySelector('.tablewrap');
+
+    if (existingTable) {
+
+        existingTable.outerHTML = detailedTable;
+
+        // Reconnect record-click events.
+        container.querySelectorAll(
+            '.tablewrap [data-record]'
+        ).forEach(element => {
+
+            element.onclick = () => {
+                openRecord(element.dataset.record);
+            };
+
+        });
+    }
+
+    // Display the number of matching records.
+    const toolbarCount =
+        container.querySelector('.toolbar .muted');
+
+    if (toolbarCount) {
+        toolbarCount.textContent =
+            matching.length + ' records';
+    }
+
+    const viewCount =
+        container.querySelector('.viewbar > .muted');
+
+    if (viewCount) {
+        viewCount.textContent =
+            matching.length + ' entries';
+    }
+}
+   
+   // Check punishment expiry when the workspace loads.
 updatePunishmentStatuses();
 
 // Refresh punishment statuses every minute while open.
