@@ -686,6 +686,66 @@
       }
     }
 
+   /* ==========================================
+   INFRACTION CASE TRACKING
+========================================== */
+
+.case-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin: 18px 0;
+}
+
+.case-stat {
+    background: #242124;
+    border: 1px solid #393137;
+    border-radius: 9px;
+    padding: 15px;
+}
+
+.case-stat span {
+    display: block;
+    color: #aaa1a7;
+    font-size: 12px;
+    margin-bottom: 8px;
+}
+
+.case-stat strong {
+    font-size: 20px;
+    color: #f1eeee;
+}
+
+.case-section {
+    margin-top: 22px;
+}
+
+.case-section h3 {
+    font-size: 15px;
+    margin-bottom: 12px;
+}
+
+.case-section .tablewrap table {
+    min-width: 520px;
+}
+
+.case-empty {
+    padding: 18px;
+    border: 1px dashed #49343a;
+    border-radius: 8px;
+    color: #aaa1a7;
+}
+
+.case-link {
+    color: #f06a7b;
+    font-weight: 600;
+}
+
+@media (max-width: 600px) {
+    .case-summary {
+        grid-template-columns: 1fr;
+    }
+}
   
     /* Player profile: Notion-style linked database page */
     .profile-heading{display:flex;align-items:center;gap:15px;margin-bottom:22px}
@@ -892,89 +952,440 @@ function issuePunishment(infractionId) {
     document.getElementById('modalTitle').textContent =
         'Issue Punishment — ' + infraction.id;
 } 
-   function openRecord(id){let section=page==='overview'?'infractions':page;let rec=data[section]?.find(x=>x.id===id);if(!rec)return;let original=page;page=section;
-      if(section==='players'){
-        const cases=data.infractions.filter(x=>x.player===rec.id);
-        const punishments=data.punishments.filter(x=>x.player===rec.id);
-        const appeals=data.appeals.filter(x=>x.player===rec.id);
-        const linked=(heading,items,columns,format)=>`<section class="profile-section"><h3>${heading} <span class="muted">(${items.length})</span></h3>${items.length?table(columns,items.map(x=>row(x.id,format(x)))):'<p class="muted">No linked records.</p>'}</section>`;
-        const profile=`<div class="profile-heading"><div class="profile-avatar">${esc(rec.name.slice(0,2).toUpperCase())}</div><div><h2>${esc(rec.name)}</h2><span class="muted">${esc(rec.id)} · Manually added player</span></div></div>
-          <div class="profile-properties"><div><span class="key">Discord ID</span><p>${esc(rec.discord||'Not recorded')}</p></div><div><span class="key">Characters</span><p>${esc(rec.characters||'Not recorded')}</p></div></div>
-          <section class="profile-section"><h3>Internal notes</h3><p class="profile-notes">${esc(rec.notes||'No notes yet.')}</p></section>
-          ${linked('Infractions',cases,['Case','Violation','Status'],x=>[esc(x.id),esc(x.type),badge(x.status)])}
-          ${linked('Punishments',punishments,['Record','Action','Status'],x=>[esc(x.id),esc(x.action),badge(x.status)])}
-          ${linked('Appeals',appeals,['Appeal','Punishment','Status'],x=>[esc(x.id),esc(x.punishment),badge(x.status)])}
-          <div class="actions"><button class="secondary" id="cancel">Close</button><button class="primary" id="editRecord">Edit player</button></div>`;
-        modal('Player profile',profile);
-        document.getElementById('cancel').onclick=()=>{close();page=original;render()};
-        document.getElementById('editRecord').onclick=()=>edit(rec);
-        document.querySelectorAll('.profile-section [data-record]').forEach(el=>el.onclick=()=>{
-          const target=el.dataset.record;
-          page=target.startsWith('INF-')?'infractions':target.startsWith('PUN-')?'punishments':'appeals';
-          openRecord(target);
-        });
+   // =====================================================
+// RECORD VIEWER, PLAYER PROFILES & CASE TRACKING
+// =====================================================
+
+function openRecord(id) {
+
+    const section = page === 'overview' ? 'infractions' : page;
+    const rec = data[section]?.find(item => item.id === id);
+
+    if (!rec) {
+        alert('Record not found.');
         return;
-      }
-      let info = Object.entries(rec).map(([k, v]) => {
+    }
 
-    let content = esc(k === 'player' ? player(v) : v);
+    const originalPage = page;
+    page = section;
 
-    if (k === 'evidence') {
-        const links = String(v || '')
+    // -------------------------------------------------
+    // SHARED: OPEN A LINKED RECORD
+    // -------------------------------------------------
+
+    function openLinkedRecord(recordId, targetPage) {
+        close();
+        page = targetPage;
+        render();
+        openRecord(recordId);
+    }
+
+    // -------------------------------------------------
+    // PLAYER PROFILE
+    // -------------------------------------------------
+
+    if (section === 'players') {
+
+        const cases = data.infractions.filter(
+            item => item.player === rec.id
+        );
+
+        const punishments = data.punishments.filter(
+            item => item.player === rec.id
+        );
+
+        const appeals = data.appeals.filter(
+            item => item.player === rec.id
+        );
+
+        const linked = (heading, items, columns, format) => `
+            <section class="profile-section">
+                <h3>
+                    ${heading}
+                    <span class="muted">(${items.length})</span>
+                </h3>
+
+                ${
+                    items.length
+                        ? table(
+                            columns,
+                            items.map(item =>
+                                row(item.id, format(item))
+                            )
+                        )
+                        : '<p class="muted">No linked records.</p>'
+                }
+            </section>
+        `;
+
+        const profile = `
+            <div class="profile-heading">
+                <div class="profile-avatar">
+                    ${esc(rec.name.slice(0, 2).toUpperCase())}
+                </div>
+
+                <div>
+                    <h2>${esc(rec.name)}</h2>
+                    <span class="muted">
+                        ${esc(rec.id)} · Manually added player
+                    </span>
+                </div>
+            </div>
+
+            <div class="profile-properties">
+                <div>
+                    <span class="key">Discord ID</span>
+                    <p>${esc(rec.discord || 'Not recorded')}</p>
+                </div>
+
+                <div>
+                    <span class="key">Characters</span>
+                    <p>${esc(rec.characters || 'Not recorded')}</p>
+                </div>
+            </div>
+
+            <section class="profile-section">
+                <h3>Internal notes</h3>
+                <p class="profile-notes">
+                    ${esc(rec.notes || 'No notes yet.')}
+                </p>
+            </section>
+
+            ${linked(
+                'Infractions',
+                cases,
+                ['Case', 'Violation', 'Status'],
+                item => [
+                    esc(item.id),
+                    esc(item.type),
+                    badge(item.status)
+                ]
+            )}
+
+            ${linked(
+                'Punishments',
+                punishments,
+                ['Record', 'Action', 'Status'],
+                item => [
+                    esc(item.id),
+                    esc(item.action),
+                    badge(item.status)
+                ]
+            )}
+
+            ${linked(
+                'Appeals',
+                appeals,
+                ['Appeal', 'Punishment', 'Status'],
+                item => [
+                    esc(item.id),
+                    esc(item.punishment),
+                    badge(item.status)
+                ]
+            )}
+
+            <div class="actions">
+                <button class="secondary" id="cancel">
+                    Close
+                </button>
+
+                <button class="primary" id="editRecord">
+                    Edit player
+                </button>
+            </div>
+        `;
+
+        modal('Player profile', profile);
+
+        document.getElementById('cancel').onclick = () => {
+            close();
+            page = originalPage;
+            render();
+        };
+
+        document.getElementById('editRecord').onclick = () => {
+            edit(rec);
+        };
+
+        document.querySelectorAll(
+            '.profile-section [data-record]'
+        ).forEach(element => {
+
+            element.onclick = () => {
+                const target = element.dataset.record;
+
+                const targetPage = target.startsWith('INF-')
+                    ? 'infractions'
+                    : target.startsWith('PUN-')
+                        ? 'punishments'
+                        : 'appeals';
+
+                openLinkedRecord(target, targetPage);
+            };
+
+        });
+
+        return;
+    }
+
+    // -------------------------------------------------
+    // EVIDENCE LINK FORMATTING
+    // -------------------------------------------------
+
+    function formatEvidence(value) {
+
+        const links = String(value || '')
             .split('\n')
             .map(link => link.trim())
             .filter(Boolean);
 
-        content = links.length
-            ? links.map(link => {
-                try {
-                    const url = new URL(link);
+        if (!links.length) {
+            return '<span class="muted">No evidence attached</span>';
+        }
 
-                    if (!['https:', 'http:'].includes(url.protocol)) {
-                        return `<div>${esc(link)}</div>`;
-                    }
+        return links.map(link => {
 
-                    return `
-                        <div style="margin-bottom:8px">
-                            <a href="${esc(url.href)}"
-                               target="_blank"
-                               rel="noopener noreferrer"
-                               style="color:#ef5367;overflow-wrap:anywhere">
-                                ${esc(link)}
-                            </a>
-                        </div>
-                    `;
-                } catch {
+            try {
+                const url = new URL(link);
+
+                if (!['http:', 'https:'].includes(url.protocol)) {
                     return `<div>${esc(link)}</div>`;
                 }
-            }).join('')
-            : '<span class="muted">No evidence attached</span>';
+
+                return `
+                    <div style="margin-bottom:8px">
+                        <a
+                            href="${esc(url.href)}"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="case-link"
+                            style="overflow-wrap:anywhere"
+                        >
+                            ${esc(link)}
+                        </a>
+                    </div>
+                `;
+
+            } catch {
+                return `<div>${esc(link)}</div>`;
+            }
+
+        }).join('');
     }
 
-    return `
-        <div class="record">
-            <span class="key">
-                ${esc(k.replace(/_/g, ' ').toUpperCase())}
-            </span>
-            <p>${content}</p>
+    // -------------------------------------------------
+    // STANDARD RECORD INFORMATION
+    // -------------------------------------------------
+
+    const info = Object.entries(rec).map(([key, value]) => {
+
+        let content = esc(
+            key === 'player' ? player(value) : value
+        );
+
+        if (key === 'evidence') {
+            content = formatEvidence(value);
+        }
+
+        return `
+            <div class="record">
+                <span class="key">
+                    ${esc(key.replace(/_/g, ' ').toUpperCase())}
+                </span>
+
+                <p>${content}</p>
+            </div>
+        `;
+
+    }).join('');
+
+    // -------------------------------------------------
+    // INFRACTION PUNISHMENT HISTORY
+    // -------------------------------------------------
+
+    let caseTracking = '';
+
+    if (section === 'infractions') {
+
+        const linkedPunishments = data.punishments.filter(
+            item => item.infraction === rec.id
+        );
+
+        const activeCount = linkedPunishments.filter(
+            item => item.status === 'Active'
+        ).length;
+
+        const totalCount = linkedPunishments.length;
+
+        const caseOutcome = totalCount === 0
+            ? 'No punishment'
+            : activeCount > 0
+                ? 'Active punishment'
+                : 'No active punishment';
+
+        const punishmentRows = linkedPunishments.map(item => {
+
+            return row(item.id, [
+                `<span class="case-link">${esc(item.id)}</span>`,
+                esc(item.action || 'Unknown'),
+                esc(item.duration || 'N/A'),
+                badge(item.status || 'Unknown'),
+                esc(item.officer || 'Not recorded'),
+                esc(item.date || 'Not recorded')
+            ]);
+
+        });
+
+        caseTracking = `
+            <div class="case-section">
+
+                <h3>Case Tracking</h3>
+
+                <div class="case-summary">
+
+                    <div class="case-stat">
+                        <span>Total Punishments</span>
+                        <strong>${totalCount}</strong>
+                    </div>
+
+                    <div class="case-stat">
+                        <span>Active Punishments</span>
+                        <strong>${activeCount}</strong>
+                    </div>
+
+                    <div class="case-stat">
+                        <span>Punishment Outcome</span>
+                        <div style="margin-top:8px">
+                            ${badge(caseOutcome)}
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="case-section">
+
+                <h3>
+                    Punishment History
+                    <span class="muted">(${totalCount})</span>
+                </h3>
+
+                ${
+                    totalCount
+                        ? table(
+                            [
+                                'Punishment ID',
+                                'Action',
+                                'Duration',
+                                'Status',
+                                'Issued By',
+                                'Date'
+                            ],
+                            punishmentRows
+                        )
+                        : `
+                            <div class="case-empty">
+                                No punishments have been issued
+                                for this infraction.
+                            </div>
+                        `
+                }
+
+            </div>
+        `;
+    }
+
+    // -------------------------------------------------
+    // DISPLAY RECORD MODAL
+    // -------------------------------------------------
+
+    const recordHTML = `
+        <div class="formgrid">
+            ${info}
+        </div>
+
+        ${caseTracking}
+
+        <div class="actions">
+
+            <button class="secondary" id="cancel">
+                Close
+            </button>
+
+            <button class="primary" id="editRecord">
+                Edit record
+            </button>
+
+            ${
+                section === 'infractions'
+                    ? `
+                        <button
+                            class="primary"
+                            id="issuePunishment"
+                        >
+                            ⚖ Issue Punishment
+                        </button>
+                    `
+                    : ''
+            }
+
         </div>
     `;
 
-}).join('');modal(id,`<div class="formgrid">${info}</div><div class="actions"><button class="secondary" id="cancel">Close</button><button class="primary" id="editRecord">Edit record</button>
-${section === 'infractions' ? '<button class="primary" id="issuePunishment">⚖ Issue Punishment</button>' : ''}</div>`);document.getElementById('cancel').onclick=()=>{close();page=original;render()};document.getElementById('editRecord').onclick = () => edit(rec);
+    modal(rec.id, recordHTML);
 
-// Connect the Issue Punishment button.
-if (section === 'infractions') {
+    // -------------------------------------------------
+    // BUTTON ACTIONS
+    // -------------------------------------------------
 
-    const punishmentButton =
-        document.getElementById('issuePunishment');
+    document.getElementById('cancel').onclick = () => {
+        close();
+        page = originalPage;
+        render();
+    };
 
-    if (punishmentButton) {
-        punishmentButton.onclick = () => {
-            issuePunishment(rec.id);
-        };
+    document.getElementById('editRecord').onclick = () => {
+        edit(rec);
+    };
+
+    // Issue punishment from infraction.
+    if (section === 'infractions') {
+
+        const punishmentButton =
+            document.getElementById('issuePunishment');
+
+        if (punishmentButton) {
+
+            punishmentButton.onclick = () => {
+
+                if (typeof issuePunishment === 'function') {
+                    issuePunishment(rec.id);
+                } else {
+                    alert(
+                        'The Issue Punishment function has not been installed yet.'
+                    );
+                }
+
+            };
+
+        }
+
+        // Open linked punishment records.
+        document.querySelectorAll(
+            '.case-section [data-record]'
+        ).forEach(element => {
+
+            element.onclick = () => {
+                openLinkedRecord(
+                    element.dataset.record,
+                    'punishments'
+                );
+            };
+
+        });
     }
-}}
+}
     
     function close(){document.getElementById('modalback').classList.remove('show')}document.getElementById('close').onclick=close;document.getElementById('modalback').onclick=e=>{if(e.target.id==='modalback')close()};document.getElementById('add').onclick=()=>edit(null);document.getElementById('export').onclick=()=>{let blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='vengeful-realms-demo-export.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};document.getElementById('mobileToggle').onclick=()=>document.body.classList.toggle('sidebar-open');render();
 
