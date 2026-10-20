@@ -1530,6 +1530,120 @@
         grid-template-columns: 1fr;
     }
 }
+
+   /* ==========================================
+   INVESTIGATION WORKFLOW
+========================================== */
+
+.iw-panel {
+    padding: 20px;
+    border: 1px solid #62313d;
+    border-radius: 12px;
+    background: #211d22;
+}
+
+.iw-panel h3 {
+    margin: 0 0 15px;
+    font-size: 16px;
+    color: #f4edf0;
+}
+
+.iw-progress {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 20px;
+}
+
+.iw-step {
+    padding: 12px 5px;
+    text-align: center;
+    border: 1px solid #393139;
+    border-radius: 8px;
+    background: #292429;
+    color: #a69ba3;
+    font-size: 11px;
+}
+
+.iw-step.complete {
+    background: #33262b;
+    border-color: #82404d;
+    color: #f0a2ae;
+}
+
+.iw-step.current {
+    background: #5a2734;
+    border-color: #e24c65;
+    color: #fff;
+    font-weight: 700;
+}
+
+.iw-details {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.iw-detail {
+    padding: 13px;
+    border: 1px solid #383139;
+    border-radius: 8px;
+    background: #282329;
+}
+
+.iw-detail span {
+    display: block;
+    margin-bottom: 7px;
+    color: #aaa0a9;
+    font-size: 11px;
+}
+
+.iw-detail strong {
+    display: block;
+    color: #f4edf0;
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+
+.iw-text {
+    margin-top: 14px;
+    padding: 14px;
+    border: 1px solid #383139;
+    border-radius: 8px;
+    background: #282329;
+}
+
+.iw-text h4 {
+    margin: 0 0 9px;
+    font-size: 12px;
+    color: #ee9ca9;
+}
+
+.iw-text p {
+    margin: 0;
+    color: #d4cbd1;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.6;
+    font-size: 13px;
+}
+
+.iw-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 18px;
+}
+
+@media (max-width: 600px) {
+    .iw-progress {
+        grid-template-columns: 1fr;
+    }
+
+    .iw-details {
+        grid-template-columns: 1fr;
+    }
+}
    
     /* Player profile: Notion-style linked database page */
     .profile-heading{display:flex;align-items:center;gap:15px;margin-bottom:22px}
@@ -1778,7 +1892,13 @@ function badge(status) {
     function row(id,cells){return `<tr data-record="${esc(id)}">${cells.map(c=>`<td>${c}</td>`).join('')}</tr>`}
     
     function render(){nav();document.getElementById('title').textContent=LABEL[page];document.getElementById('crumb').textContent=LABEL[page];document.getElementById('subtitle').textContent=({overview:'Your enforcement command centre',players:'Accounts and linked character histories',infractions:'Investigations and rule violations',punishments:'Warnings, kicks, and bans',appeals:'Punishment reviews and outcomes',activity:'Local demo activity history'})[page];document.getElementById('add').style.display=['overview','activity'].includes(page)?'none':'';let html='';if(page==='overview'){let active=data.punishments.filter(x=>x.status==='Active').length,pending=data.appeals.filter(x=>x.status==='Pending').length;html=`<div class="workspace-intro"><div><h2>Enforcement command centre</h2><p>Review incidents, manage player records and track disciplinary actions.</p></div><div class="intro-mark">⚔</div></div><div class="stats">${[['Players',data.players.length],['Infractions',data.infractions.length],['Active punishments',active],['Pending appeals',pending]].map(([k,v])=>`<div class="stat"><span>${k}</span><strong>${v}</strong></div>`).join('')}</div><div class="panel"><h2>Recent infractions</h2>${table(['Case','Player','Violation','Status'],data.infractions.slice(-6).reverse().map(x=>row(x.id,[esc(x.id),esc(player(x.player)),esc(x.type),badge(x.status)])))}</div>`}else if(page==='activity'){html=auditPanel()}else{let items=data[page];let statusOptions=page==='players'?[]:Array.from(new Set(items.map(x=>x.status).filter(Boolean)));let fields={players:['id','name','discord','characters','cases','punishments'],infractions:['id','player','type','severity','status','date'],punishments:['id','player','action','duration','status','date'],appeals:['id','player','punishment','status','reviewer']}[page];let names={id:'Record ID',name:'Player',discord:'Discord ID',characters:'Characters',player:'Player',type:'Rule Violated',severity:'Severity',status:'Status',date:'Date',action:'Punishment',duration:'Duration',punishment:'Linked punishment',reviewer:'Reviewer',cases:'Infractions',punishments:'Punishments'};let filtered=items.filter(x=>(statusFilter==='All'||x.status===statusFilter)&&Object.values(x).join(' ').toLowerCase().includes(filter.toLowerCase())||(statusFilter==='All'||x.status===statusFilter)&&player(x.player).toLowerCase().includes(filter.toLowerCase()));html=`<div class="viewbar"><div class="viewtabs"><button class="viewtab ${viewMode==='table'?'selected':''}" data-view="table">▤ &nbsp; Table</button><button class="viewtab ${viewMode==='board'?'selected':''}" data-view="board">▥ &nbsp; Board</button></div><span class="muted">${filtered.length} entries</span></div><div class="toolbar"><input class="search" id="search" placeholder="Search ${LABEL[page].toLowerCase()}…" value="${esc(filter)}">${statusOptions.length?`<select id="statusFilter"><option>All</option>${statusOptions.map(s=>`<option ${statusFilter===s?'selected':''}>${esc(s)}</option>`).join('')}</select>`:''}<span class="muted">${filtered.length} records</span></div>`+(viewMode==='table'?table(fields.map(f=>names[f]||f),filtered.map(x=>row(x.id,fields.map(f=>f==='player'?esc(player(x[f])):f==='cases'?data.infractions.filter(i=>i.player===x.id).length:f==='punishments'?data.punishments.filter(i=>i.player===x.id).length:f==='status'?badge(x[f]):esc(x[f]))))):`<div class="board">${(statusOptions.length?statusOptions:['All records']).map(st=>`<div class="board-col"><div class="board-title">${esc(st)} <span class="board-count">${filtered.filter(x=>!statusOptions.length||x.status===st).length}</span></div>${filtered.filter(x=>!statusOptions.length||x.status===st).map(x=>`<div class="board-card" data-record="${esc(x.id)}"><strong>${esc(x.name||x.type||x.action||x.id)}</strong><small>${esc(x.player?player(x.player):x.id)}</small><div style="margin-top:10px">${x.status?badge(x.status):''}</div></div>`).join('')||'<div class="muted">No records</div>'}</div>`).join('')}</div>`)}document.getElementById('content').innerHTML=html;document.querySelectorAll('[data-record]').forEach(tr=>tr.onclick=()=>openRecord(tr.dataset.record));document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{viewMode=b.dataset.view;render()});let search=document.getElementById('search');if(search)search.oninput=e=>{let start=e.target.selectionStart;filter=e.target.value;render();let s=document.getElementById('search');s.focus();s.setSelectionRange(start,start)};let sf=document.getElementById('statusFilter');if(sf)sf.onchange=e=>{statusFilter=e.target.value;render()}}
-    const schemas={players:[['name','Player name','text'],['discord','Discord ID (17–20 digits)','text'],['characters','Character names (comma-separated)','text'],['notes','Internal notes','textarea']],infractions:[['player','Player','player'],['type','Rule Violated','text'],['severity','Severity','select:Low|Moderate|High|Critical'],['date','Incident date','date'],['officer','Reporting officer','text'],['status','Status','select:Open|Investigating|Resolved|Dismissed'],['description','Incident description','textarea'],['investigationNotes','Investigation Notes','textarea'],['evidence','Evidence Links (one per line)','textarea']],punishments:[['player','Player','player'],['infraction','Linked infraction ID','text'],['action','Action','select:Verbal Warning|Written Warning|Kick|Temporary Ban|Permanent Ban|Other'],['duration','Duration / notes','text'],
+    const schemas={players:[['name','Player name','text'],['discord','Discord ID (17–20 digits)','text'],['characters','Character names (comma-separated)','text'],['notes','Internal notes','textarea']],infractions:[['player','Player','player'],['type','Rule Violated','text'],['severity','Severity','select:Low|Moderate|High|Critical'],['date','Incident date','date'],['officer','Reporting officer','text'],['status','Status','select:Open|Investigating|Resolved|Dismissed'],['description','Incident description','textarea'],['investigationNotes','Investigation Notes','textarea'],['assignedOfficer','Assigned Officer','text'],
+['investigationStage','Investigation Stage','select:Reported|Assigned|Investigating|Pending Review|Closed'],
+['casePriority','Case Priority','select:Low|Normal|High|Urgent'],
+['investigationFindings','Investigation Findings','textarea'],
+['caseOutcome','Case Outcome','select:Undetermined|Substantiated|Unsubstantiated|Inconclusive|Withdrawn'],
+['resolutionNotes','Resolution Notes','textarea'],
+['resolutionDate','Resolution Date','date'],['evidence','Evidence Links (one per line)','textarea']],punishments:[['player','Player','player'],['infraction','Linked infraction ID','text'],['action','Action','select:Verbal Warning|Written Warning|Kick|Temporary Ban|Permanent Ban|Other'],['duration','Duration / notes','text'],
 ['expiresAt','Expiry date (temporary bans only)','date'],['status','Status','select:Active|Expired|Revoked'],['officer','Issuing officer','text'],['date','Issued date','date'],['notes','Reason / notes','textarea']],appeals:[['player','Player','player'],['punishment','Punishment ID','text'],['status','Status','select:Pending|Under Review|Approved|Denied'],['reviewer','Reviewer (not original issuing officer)','text'],['reason','Appeal statement','textarea'],['decision','Decision and reasoning','textarea']]};
     
     function modal(title,body){document.getElementById('modalTitle').textContent=title;document.getElementById('modalBody').innerHTML=body;document.getElementById('modalback').classList.add('show')}
@@ -2032,6 +2152,130 @@ function revokePunishment(punishmentId) {
 }
 
    // =====================================================
+// INVESTIGATION WORKFLOW DISPLAY
+// =====================================================
+
+function renderInvestigationWorkflow(rec) {
+
+    const stages = [
+        'Reported',
+        'Assigned',
+        'Investigating',
+        'Pending Review',
+        'Closed'
+    ];
+
+    const stage = stages.includes(rec.investigationStage)
+        ? rec.investigationStage
+        : 'Reported';
+
+    const currentIndex = stages.indexOf(stage);
+
+    const progressHTML = stages.map((name, index) => {
+
+        let className = '';
+
+        if (index < currentIndex) {
+            className = 'complete';
+        }
+
+        if (index === currentIndex) {
+            className = 'current';
+        }
+
+        return `
+            <div class="iw-step ${className}">
+                ${esc(name)}
+            </div>
+        `;
+
+    }).join('');
+
+    const detail = (label, value) => `
+        <div class="iw-detail">
+            <span>${esc(label)}</span>
+            <strong>${esc(value || 'Not recorded')}</strong>
+        </div>
+    `;
+
+    const textSection = (label, value) => `
+        <div class="iw-text">
+            <h4>${esc(label)}</h4>
+            <p>${esc(value || 'No information recorded.')}</p>
+        </div>
+    `;
+
+    return `
+
+        <section class="iw-panel" id="investigationWorkflow">
+
+            <h3>Investigation Workflow</h3>
+
+            <div class="iw-progress">
+                ${progressHTML}
+            </div>
+
+            <div class="iw-details">
+
+                ${detail(
+                    'Assigned Officer',
+                    rec.assignedOfficer
+                )}
+
+                ${detail(
+                    'Current Stage',
+                    stage
+                )}
+
+                <div class="iw-detail">
+                    <span>Case Priority</span>
+                    ${badge(rec.casePriority || 'Normal')}
+                </div>
+
+                ${detail(
+                    'Case Outcome',
+                    rec.caseOutcome || 'Undetermined'
+                )}
+
+                ${detail(
+                    'Resolution Date',
+                    rec.resolutionDate
+                )}
+
+                <div class="iw-detail">
+                    <span>Case Status</span>
+                    ${badge(rec.status || 'Open')}
+                </div>
+
+            </div>
+
+            ${textSection(
+                'Investigation Findings',
+                rec.investigationFindings
+            )}
+
+            ${textSection(
+                'Resolution Notes',
+                rec.resolutionNotes
+            )}
+
+            <div class="iw-actions">
+
+                <button
+                    type="button"
+                    class="primary"
+                    id="iwEditWorkflow"
+                >
+                    Update Investigation
+                </button>
+
+            </div>
+
+        </section>
+    `;
+}
+
+   // =====================================================
 // ENHANCED INFRACTION CASE PROFILE
 // =====================================================
 
@@ -2197,6 +2441,8 @@ function showEnhancedInfractionCase(caseId) {
 
             </section>
 
+            ${renderInvestigationWorkflow(rec)}
+
 
             <section class="casefile-section">
 
@@ -2285,6 +2531,10 @@ function showEnhancedInfractionCase(caseId) {
     modal('Infraction Case — ' + rec.id, html);
 
     document.getElementById('casefileClose').onclick = close;
+    document.getElementById('iwEditWorkflow').onclick = () => {
+    page = 'infractions';
+    edit(rec);
+};
 
     document.getElementById('casefileEdit').onclick = () => {
         page = 'infractions';
