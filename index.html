@@ -1976,6 +1976,130 @@
         flex-direction: column;
     }
 }
+
+   /* ==========================================
+   STAFF DIRECTORY
+========================================== */
+
+.sd-directory {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.sd-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.sd-stat, .sd-card, .sd-panel {
+    background: #242025;
+    border: 1px solid #49353f;
+    border-radius: 11px;
+    padding: 17px;
+}
+
+.sd-stat strong {
+    display: block;
+    color: #fff;
+    font-size: 26px;
+    margin-bottom: 6px;
+}
+
+.sd-stat span, .sd-muted {
+    color: #ada1aa;
+    font-size: 12px;
+}
+
+.sd-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.sd-toolbar input, .sd-toolbar select,
+.sd-form input, .sd-form select, .sd-form textarea {
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid #59424c;
+    border-radius: 8px;
+    background: #2e272d;
+    color: #f5edf0;
+}
+
+.sd-toolbar input {
+    flex: 1;
+    min-width: 180px;
+}
+
+.sd-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.sd-card h3 {
+    color: #fff;
+    font-size: 16px;
+    margin: 0 0 7px;
+    overflow-wrap: anywhere;
+}
+
+.sd-card p {
+    color: #bcb0b9;
+    font-size: 12px;
+    margin: 7px 0;
+    overflow-wrap: anywhere;
+}
+
+.sd-card .sd-count {
+    font-size: 24px;
+    font-weight: 800;
+    color: #f5edf0;
+}
+
+.sd-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.sd-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 13px;
+}
+
+.sd-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: #d6cbd2;
+    font-size: 12px;
+}
+
+.sd-form .sd-full {
+    grid-column: 1 / -1;
+}
+
+.sd-form textarea {
+    min-height: 90px;
+    resize: vertical;
+}
+
+@media (max-width: 900px) {
+    .sd-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 600px) {
+    .sd-grid, .sd-stats, .sd-form {
+        grid-template-columns: 1fr;
+    }
+}
    
     /* Player profile: Notion-style linked database page */
     .profile-heading{display:flex;align-items:center;gap:15px;margin-bottom:22px}
@@ -2109,6 +2233,11 @@ KEYS.splice(3, 0, 'investigations');
 
 LABEL.investigations = 'Investigations';
 ICON.investigations = '⌕';
+   // Register the Staff Directory page.
+KEYS.push('staff');
+
+LABEL.staff = 'Staff Directory';
+ICON.staff = '♙';
    let page='overview',filter='',statusFilter='All',viewMode='table';const storeKey='vr_workspace_demo_v1';const demo={players:[{id:'P-001',name:'ExamplePlayer',discord:'000000000000000001',characters:'Vekor, Torin',notes:'Demo player profile'},{id:'P-002',name:'NordicExample',discord:'000000000000000002',characters:'Haldor',notes:'Demo player profile'}],infractions:[{id:'INF-001',player:'P-001',type:'Metagaming',severity:'Moderate',date:'2026-10-18',officer:'Example Officer',status:'Resolved',description:'Illustrative incident only',evidence:''},{id:'INF-002',player:'P-002',type:'FailRP',severity:'Low',date:'2026-10-17',officer:'Example Officer',status:'Open',description:'Illustrative incident only',evidence:''}],punishments:[{id:'PUN-001',player:'P-001',infraction:'INF-001',action:'Warning',duration:'N/A',status:'Active',officer:'Example Officer',date:'2026-10-18',notes:'Demo punishment'}],appeals:[{id:'APP-001',punishment:'PUN-001',player:'P-001',status:'Pending',reviewer:'',reason:'Illustrative appeal request',decision:''}],activity:[]};let data;try{data=JSON.parse(localStorage.getItem(storeKey))||structuredClone(demo)}catch{data=structuredClone(demo)};
     
     function save(){localStorage.setItem(storeKey,JSON.stringify(data))}
@@ -5167,7 +5296,14 @@ function renderOfficerWorkload() {
     board.querySelector('.ow-panel')?.remove();
 
     const workload = getOfficerWorkload();
-
+// Directory-managed staff available for assignment.
+const assignableStaff = data.staff.filter(member =>
+    member.status === 'Active' &&
+    (
+        member.role === 'Enforcement Officer' ||
+        member.role === 'Enforcement Captain'
+    )
+);
     const officerCards = workload.officers.length
 
         ? workload.officers.map(officer => {
@@ -5259,15 +5395,11 @@ function renderOfficerWorkload() {
                             Select Officer
                         </option>
 
-                        ${workload.officerNames.map(name => `
-                            <option value="${esc(name)}">
-                                ${esc(name)}
-                            </option>
-                        `).join('')}
-
-                        <option value="__new__">
-                            + New Officer
-                        </option>
+                        ${assignableStaff.map(member => `
+    <option value="${esc(member.name)}">
+        ${esc(member.name)} — ${esc(member.role)}
+    </option>
+`).join('')}
 
                     </select>
 
@@ -5333,7 +5465,13 @@ function renderOfficerWorkload() {
 // -----------------------------------------------------
 
 function assignInvestigationOfficer(caseId, officerName) {
+// Link the assignment to a Staff Directory record where possible.
+const matchingStaff = data.staff.find(member =>
+    member.name.toLowerCase() === name.toLowerCase() &&
+    member.status === 'Active'
+);
 
+rec.assignedOfficerId = matchingStaff?.id || '';
     const rec = data.infractions.find(
         item => item.id === caseId
     );
@@ -5445,12 +5583,6 @@ document.getElementById('content').addEventListener(
 
         let officerName = select.value;
 
-        if (officerName === '__new__') {
-
-            const entered = prompt(
-                'Enter the Enforcement Officer name:'
-            );
-
             if (entered === null) return;
 
             officerName = entered.trim();
@@ -5486,6 +5618,520 @@ render = function () {
     if (page === 'investigations') {
         renderOfficerWorkload();
     }
+};
+
+   // =====================================================
+// STAFF DIRECTORY & OFFICER MANAGEMENT
+// =====================================================
+
+// Initialise staff records without overwriting existing data.
+if (!Array.isArray(data.staff)) {
+    data.staff = [];
+    save();
+}
+
+let staffSearch = '';
+let staffRoleFilter = 'All';
+let staffStatusFilter = 'All';
+
+const STAFF_ROLES = [
+    'Enforcement Captain',
+    'Enforcement Officer',
+    'Trial Enforcement'
+];
+
+const STAFF_STATUSES = [
+    'Active',
+    'Inactive',
+    'On Leave'
+];
+
+function staffById(id) {
+    return data.staff.find(item => item.id === id);
+}
+
+function staffDisplayName(id) {
+    return staffById(id)?.name || 'Unknown staff member';
+}
+
+function staffCaseCount(member) {
+
+    return data.infractions.filter(rec => {
+
+        if (investigationStageFor(rec) === 'Closed') {
+            return false;
+        }
+
+        // Support both new staff IDs and older name-based cases.
+        return rec.assignedOfficerId === member.id ||
+            (
+                !rec.assignedOfficerId &&
+                rec.assignedOfficer === member.name
+            );
+    }).length;
+}
+
+
+// -----------------------------------------------------
+// STAFF DIRECTORY PAGE
+// -----------------------------------------------------
+
+function renderStaffDirectory() {
+
+    const container = document.getElementById('content');
+
+    if (!container) return;
+
+    const members = data.staff;
+
+    const activeCount = members.filter(
+        member => member.status === 'Active'
+    ).length;
+
+    const captainCount = members.filter(
+        member =>
+            member.role === 'Enforcement Captain' &&
+            member.status === 'Active'
+    ).length;
+
+    const onLeaveCount = members.filter(
+        member => member.status === 'On Leave'
+    ).length;
+
+    const visible = members.filter(member => {
+
+        const searchable = [
+            member.name,
+            member.discord,
+            member.role,
+            member.id
+        ].join(' ').toLowerCase();
+
+        return (
+            searchable.includes(staffSearch.toLowerCase()) &&
+            (
+                staffRoleFilter === 'All' ||
+                member.role === staffRoleFilter
+            ) &&
+            (
+                staffStatusFilter === 'All' ||
+                member.status === staffStatusFilter
+            )
+        );
+    });
+
+    const cards = visible.map(member => `
+
+        <div class="sd-card">
+
+            <h3>${esc(member.name)}</h3>
+
+            <p>${esc(member.id)}</p>
+
+            <div>
+                ${badge(member.role)}
+                ${badge(member.status)}
+            </div>
+
+            <p>
+                Discord: ${esc(member.discord || 'Not recorded')}
+            </p>
+
+            <p>
+                Joined: ${esc(member.joinDate || 'Not recorded')}
+            </p>
+
+            <div class="sd-count">
+                ${staffCaseCount(member)}
+            </div>
+
+            <span class="sd-muted">
+                Active investigations
+            </span>
+
+            <div class="sd-actions">
+
+                <button
+                    type="button"
+                    class="secondary"
+                    data-sd-edit="${esc(member.id)}"
+                >
+                    Edit Profile
+                </button>
+
+                <button
+                    type="button"
+                    class="secondary"
+                    data-sd-cases="${esc(member.id)}"
+                >
+                    View Cases
+                </button>
+
+            </div>
+
+        </div>
+    `).join('');
+
+    container.innerHTML = `
+
+        <div class="sd-directory">
+
+            <div class="sd-stats">
+
+                <div class="sd-stat">
+                    <strong>${members.length}</strong>
+                    <span>Total Staff</span>
+                </div>
+
+                <div class="sd-stat">
+                    <strong>${activeCount}</strong>
+                    <span>Active Staff</span>
+                </div>
+
+                <div class="sd-stat">
+                    <strong>${captainCount}</strong>
+                    <span>Active Captains</span>
+                </div>
+
+                <div class="sd-stat">
+                    <strong>${onLeaveCount}</strong>
+                    <span>On Leave</span>
+                </div>
+
+            </div>
+
+            <div class="sd-toolbar">
+
+                <input
+                    id="sdSearch"
+                    type="search"
+                    placeholder="Search staff..."
+                    value="${esc(staffSearch)}"
+                >
+
+                <select id="sdRole">
+
+                    <option value="All">All Roles</option>
+
+                    ${STAFF_ROLES.map(role => `
+                        <option value="${esc(role)}"
+                            ${staffRoleFilter === role ? 'selected' : ''}>
+                            ${esc(role)}
+                        </option>
+                    `).join('')}
+
+                </select>
+
+                <select id="sdStatus">
+
+                    <option value="All">All Statuses</option>
+
+                    ${STAFF_STATUSES.map(status => `
+                        <option value="${esc(status)}"
+                            ${staffStatusFilter === status ? 'selected' : ''}>
+                            ${esc(status)}
+                        </option>
+                    `).join('')}
+
+                </select>
+
+                <button
+                    type="button"
+                    class="primary"
+                    id="sdAdd"
+                >
+                    + Add Staff
+                </button>
+
+            </div>
+
+            <div class="sd-grid">
+
+                ${cards || `
+                    <div class="sd-panel sd-muted">
+                        No matching staff members.
+                    </div>
+                `}
+
+            </div>
+
+        </div>
+    `;
+
+    document.getElementById('sdSearch').oninput = event => {
+        staffSearch = event.target.value;
+        renderStaffDirectory();
+        const search = document.getElementById('sdSearch');
+        search.focus();
+        search.setSelectionRange(
+            search.value.length,
+            search.value.length
+        );
+    };
+
+    document.getElementById('sdRole').onchange = event => {
+        staffRoleFilter = event.target.value;
+        renderStaffDirectory();
+    };
+
+    document.getElementById('sdStatus').onchange = event => {
+        staffStatusFilter = event.target.value;
+        renderStaffDirectory();
+    };
+
+    document.getElementById('sdAdd').onclick = () => {
+        openStaffEditor(null);
+    };
+
+    container.querySelectorAll('[data-sd-edit]').forEach(button => {
+        button.onclick = () => {
+            openStaffEditor(staffById(button.dataset.sdEdit));
+        };
+    });
+
+    container.querySelectorAll('[data-sd-cases]').forEach(button => {
+
+        button.onclick = () => {
+
+            const member = staffById(button.dataset.sdCases);
+
+            if (!member) return;
+
+            investigationOfficer = member.name;
+            page = 'investigations';
+            render();
+        };
+    });
+}
+
+
+// -----------------------------------------------------
+// ADD / EDIT STAFF
+// -----------------------------------------------------
+
+function openStaffEditor(member) {
+
+    const editing = !!member;
+
+    const roleOptions = STAFF_ROLES.map(role => `
+        <option value="${esc(role)}"
+            ${member?.role === role ? 'selected' : ''}>
+            ${esc(role)}
+        </option>
+    `).join('');
+
+    const statusOptions = STAFF_STATUSES.map(status => `
+        <option value="${esc(status)}"
+            ${(member?.status || 'Active') === status ? 'selected' : ''}>
+            ${esc(status)}
+        </option>
+    `).join('');
+
+    modal(editing ? 'Edit Staff Profile' : 'Add Staff Member', `
+
+        <form id="sdStaffForm">
+
+            <div class="sd-form">
+
+                <label>
+                    Staff Name
+                    <input
+                        name="name"
+                        required
+                        maxlength="100"
+                        value="${esc(member?.name || '')}"
+                    >
+                </label>
+
+                <label>
+                    Discord Username / ID
+                    <input
+                        name="discord"
+                        value="${esc(member?.discord || '')}"
+                    >
+                </label>
+
+                <label>
+                    Staff Role
+                    <select name="role">
+                        ${roleOptions}
+                    </select>
+                </label>
+
+                <label>
+                    Staff Status
+                    <select name="status">
+                        ${statusOptions}
+                    </select>
+                </label>
+
+                <label>
+                    Join Date
+                    <input
+                        type="date"
+                        name="joinDate"
+                        value="${esc(member?.joinDate || '')}"
+                    >
+                </label>
+
+                <label class="sd-full">
+                    Internal Notes
+                    <textarea name="notes">${esc(member?.notes || '')}</textarea>
+                </label>
+
+            </div>
+
+            <div class="actions">
+
+                <button
+                    type="button"
+                    class="secondary"
+                    id="sdCancel"
+                >
+                    Cancel
+                </button>
+
+                <button
+                    type="submit"
+                    class="primary"
+                >
+                    Save Staff Profile
+                </button>
+
+            </div>
+
+        </form>
+    `);
+
+    document.getElementById('sdCancel').onclick = close;
+
+    document.getElementById('sdStaffForm').onsubmit = event => {
+
+        event.preventDefault();
+
+        const form = new FormData(event.target);
+
+        const values = Object.fromEntries(form.entries());
+
+        values.name = String(values.name || '').trim();
+
+        if (!values.name) {
+            alert('Staff name is required.');
+            return;
+        }
+
+        const duplicate = data.staff.some(item =>
+            item.id !== member?.id &&
+            item.name.toLowerCase() === values.name.toLowerCase()
+        );
+
+        if (duplicate) {
+            alert('A staff member with this name already exists.');
+            return;
+        }
+
+        const before = editing ? structuredClone(member) : null;
+
+        if (editing) {
+
+            // Preserve historical name-based assignments when renaming.
+            data.infractions.forEach(rec => {
+
+                if (
+                    !rec.assignedOfficerId &&
+                    rec.assignedOfficer === member.name
+                ) {
+                    rec.assignedOfficerId = member.id;
+                    rec.assignedOfficer = values.name;
+                }
+
+                if (rec.assignedOfficerId === member.id) {
+                    rec.assignedOfficer = values.name;
+                }
+            });
+
+            Object.assign(member, values);
+
+        } else {
+
+            const nextNumber = Math.max(
+                0,
+                ...data.staff.map(item =>
+                    Number(String(item.id).split('-')[1]) || 0
+                )
+            ) + 1;
+
+            values.id = 'STF-' +
+                String(nextNumber).padStart(3, '0');
+
+            data.staff.push(values);
+        }
+
+        const updated = editing ? member : values;
+
+        if (typeof logAudit === 'function') {
+
+            logAudit(
+                editing ? 'Staff profile updated' : 'Staff member added',
+                'staff',
+                updated.id,
+                before,
+                structuredClone(updated),
+                updated.name
+            );
+
+        } else {
+
+            data.activity.push({
+                id: 'LOG-' + Date.now(),
+                time: new Date().toLocaleString(),
+                action: editing ? 'Staff profile updated' : 'Staff member added',
+                section: 'staff',
+                recordId: updated.id,
+                details: updated.name
+            });
+        }
+
+        save();
+        close();
+        render();
+    };
+}
+
+
+// -----------------------------------------------------
+// CONNECT STAFF DIRECTORY TO THE WORKSPACE
+// -----------------------------------------------------
+
+const renderBeforeStaffDirectory = render;
+
+render = function () {
+
+    if (page === 'staff') {
+
+        nav();
+
+        document.getElementById('title').textContent =
+            'Staff Directory';
+
+        document.getElementById('crumb').textContent =
+            'Staff';
+
+        document.getElementById('subtitle').textContent =
+            'Manage Enforcement staff and investigation assignments';
+
+        document.getElementById('add').style.display = 'none';
+
+        renderStaffDirectory();
+
+        if (typeof renderNotificationCentre === 'function') {
+            renderNotificationCentre();
+        }
+
+        return;
+    }
+
+    renderBeforeStaffDirectory();
 };
 // Render the workspace.
 render();
