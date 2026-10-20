@@ -1644,6 +1644,165 @@
         grid-template-columns: 1fr;
     }
 }
+
+   /* ==========================================
+   INVESTIGATION MANAGEMENT BOARD
+========================================== */
+
+.im-board {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.im-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.im-stat {
+    padding: 19px;
+    border: 1px solid #453039;
+    border-radius: 11px;
+    background: #211e22;
+}
+
+.im-stat strong {
+    display: block;
+    color: #fff;
+    font-size: 28px;
+    margin-bottom: 8px;
+}
+
+.im-stat span {
+    color: #b4a9b0;
+    font-size: 12px;
+}
+
+.im-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+.im-toolbar input,
+.im-toolbar select {
+    min-width: 0;
+    padding: 11px;
+    border: 1px solid #4c3941;
+    border-radius: 8px;
+    background: #282329;
+    color: #f5edf0;
+}
+
+.im-toolbar input {
+    flex: 1;
+    min-width: 190px;
+}
+
+.im-columns {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(200px, 1fr));
+    gap: 12px;
+    overflow-x: auto;
+    padding-bottom: 10px;
+}
+
+.im-column {
+    min-width: 200px;
+    padding: 12px;
+    border: 1px solid #403039;
+    border-radius: 11px;
+    background: #1d1a1e;
+}
+
+.im-column-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 3px 15px;
+    color: #f4eaf0;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.im-column-count {
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: #4b2732;
+    color: #f4b3bf;
+}
+
+.im-card {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    margin-bottom: 10px;
+    border: 1px solid #513640;
+    border-radius: 9px;
+    background: #2b242a;
+    color: #f4edf0;
+    text-align: left;
+    cursor: pointer;
+}
+
+.im-card:hover {
+    background: #392930;
+    border-color: #db4d66;
+}
+
+.im-card-id {
+    display: block;
+    color: #f08a9c;
+    font-size: 11px;
+    font-weight: 800;
+    margin-bottom: 8px;
+}
+
+.im-card-title {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+    margin-bottom: 7px;
+}
+
+.im-card-meta {
+    display: block;
+    color: #b4a9b0;
+    font-size: 11px;
+    line-height: 1.7;
+    overflow-wrap: anywhere;
+}
+
+.im-card-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 11px;
+}
+
+.im-empty {
+    padding: 18px 8px;
+    color: #918790;
+    text-align: center;
+    font-size: 12px;
+}
+
+@media (max-width: 1100px) {
+    .im-columns {
+        grid-template-columns: repeat(5, 220px);
+    }
+}
+
+@media (max-width: 650px) {
+    .im-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
    
     /* Player profile: Notion-style linked database page */
     .profile-heading{display:flex;align-items:center;gap:15px;margin-bottom:22px}
@@ -1771,7 +1930,13 @@
   <script>
  
     
-    const KEYS=['overview','players','infractions','punishments','appeals','activity'];const LABEL={overview:'Overview',players:'Player Database',infractions:'Infractions',punishments:'Punishments',appeals:'Appeals',activity:'Staff Activity'};const ICON={overview:'▦',players:'♙',infractions:'⚑',punishments:'⚖',appeals:'◇',activity:'◷'};let page='overview',filter='',statusFilter='All',viewMode='table';const storeKey='vr_workspace_demo_v1';const demo={players:[{id:'P-001',name:'ExamplePlayer',discord:'000000000000000001',characters:'Vekor, Torin',notes:'Demo player profile'},{id:'P-002',name:'NordicExample',discord:'000000000000000002',characters:'Haldor',notes:'Demo player profile'}],infractions:[{id:'INF-001',player:'P-001',type:'Metagaming',severity:'Moderate',date:'2026-10-18',officer:'Example Officer',status:'Resolved',description:'Illustrative incident only',evidence:''},{id:'INF-002',player:'P-002',type:'FailRP',severity:'Low',date:'2026-10-17',officer:'Example Officer',status:'Open',description:'Illustrative incident only',evidence:''}],punishments:[{id:'PUN-001',player:'P-001',infraction:'INF-001',action:'Warning',duration:'N/A',status:'Active',officer:'Example Officer',date:'2026-10-18',notes:'Demo punishment'}],appeals:[{id:'APP-001',punishment:'PUN-001',player:'P-001',status:'Pending',reviewer:'',reason:'Illustrative appeal request',decision:''}],activity:[]};let data;try{data=JSON.parse(localStorage.getItem(storeKey))||structuredClone(demo)}catch{data=structuredClone(demo)};
+    const KEYS=['overview','players','infractions','punishments','appeals','activity'];const LABEL={overview:'Overview',players:'Player Database',infractions:'Infractions',punishments:'Punishments',appeals:'Appeals',activity:'Staff Activity'};const ICON={overview:'▦',players:'♙',infractions:'⚑',punishments:'⚖',appeals:'◇',activity:'◷'};
+   // Register Investigation Management as a workspace page.
+KEYS.splice(3, 0, 'investigations');
+
+LABEL.investigations = 'Investigations';
+ICON.investigations = '⌕';
+   let page='overview',filter='',statusFilter='All',viewMode='table';const storeKey='vr_workspace_demo_v1';const demo={players:[{id:'P-001',name:'ExamplePlayer',discord:'000000000000000001',characters:'Vekor, Torin',notes:'Demo player profile'},{id:'P-002',name:'NordicExample',discord:'000000000000000002',characters:'Haldor',notes:'Demo player profile'}],infractions:[{id:'INF-001',player:'P-001',type:'Metagaming',severity:'Moderate',date:'2026-10-18',officer:'Example Officer',status:'Resolved',description:'Illustrative incident only',evidence:''},{id:'INF-002',player:'P-002',type:'FailRP',severity:'Low',date:'2026-10-17',officer:'Example Officer',status:'Open',description:'Illustrative incident only',evidence:''}],punishments:[{id:'PUN-001',player:'P-001',infraction:'INF-001',action:'Warning',duration:'N/A',status:'Active',officer:'Example Officer',date:'2026-10-18',notes:'Demo punishment'}],appeals:[{id:'APP-001',punishment:'PUN-001',player:'P-001',status:'Pending',reviewer:'',reason:'Illustrative appeal request',decision:''}],activity:[]};let data;try{data=JSON.parse(localStorage.getItem(storeKey))||structuredClone(demo)}catch{data=structuredClone(demo)};
     
     function save(){localStorage.setItem(storeKey,JSON.stringify(data))}
     
@@ -4338,6 +4503,430 @@ render = function () {
 setInterval(() => {
     renderNotificationCentre();
 }, 60000);
+
+   // =====================================================
+// INVESTIGATION MANAGEMENT BOARD
+// =====================================================
+
+let investigationSearch = '';
+let investigationPriority = 'All';
+let investigationOfficer = 'All';
+
+const INVESTIGATION_STAGES = [
+    'Reported',
+    'Assigned',
+    'Investigating',
+    'Pending Review',
+    'Closed'
+];
+
+function investigationStageFor(rec) {
+
+    if (INVESTIGATION_STAGES.includes(rec.investigationStage)) {
+        return rec.investigationStage;
+    }
+
+    // Provide a sensible display for older records.
+    if (['Resolved', 'Dismissed'].includes(rec.status)) {
+        return 'Closed';
+    }
+
+    if (rec.status === 'Investigating') {
+        return 'Investigating';
+    }
+
+    return 'Reported';
+}
+
+
+// -----------------------------------------------------
+// BUILD INVESTIGATION BOARD
+// -----------------------------------------------------
+
+function renderInvestigationBoard() {
+
+    const container = document.getElementById('content');
+
+    if (!container) return;
+
+    const allCases = data.infractions;
+
+    const activeCases = allCases.filter(
+        rec => investigationStageFor(rec) !== 'Closed'
+    ).length;
+
+    const urgentCases = allCases.filter(
+        rec => rec.casePriority === 'Urgent' &&
+               investigationStageFor(rec) !== 'Closed'
+    ).length;
+
+    const awaitingReview = allCases.filter(
+        rec => investigationStageFor(rec) === 'Pending Review'
+    ).length;
+
+    // Gather assigned officers for the filter.
+    const officers = [
+        ...new Set(
+            allCases
+                .map(rec => rec.assignedOfficer)
+                .filter(Boolean)
+        )
+    ].sort();
+
+    // Apply search and filters.
+    const visibleCases = allCases.filter(rec => {
+
+        const searchText = [
+            rec.id,
+            player(rec.player),
+            rec.type,
+            rec.assignedOfficer,
+            rec.description
+        ].join(' ').toLowerCase();
+
+        const matchesSearch = searchText.includes(
+            investigationSearch.toLowerCase()
+        );
+
+        const matchesPriority =
+            investigationPriority === 'All' ||
+            (rec.casePriority || 'Normal') === investigationPriority;
+
+        const matchesOfficer =
+            investigationOfficer === 'All' ||
+            (
+                investigationOfficer === 'Unassigned'
+                    ? !rec.assignedOfficer
+                    : rec.assignedOfficer === investigationOfficer
+            );
+
+        return (
+            matchesSearch &&
+            matchesPriority &&
+            matchesOfficer
+        );
+    });
+
+    // Build individual case cards.
+    const caseCard = rec => `
+
+        <button
+            type="button"
+            class="im-card"
+            data-im-case="${esc(rec.id)}"
+        >
+
+            <span class="im-card-id">
+                ${esc(rec.id)}
+            </span>
+
+            <span class="im-card-title">
+                ${esc(rec.type || 'Rule violation')}
+            </span>
+
+            <span class="im-card-meta">
+                Player: ${esc(player(rec.player))}
+            </span>
+
+            <span class="im-card-meta">
+                Officer: ${esc(rec.assignedOfficer || 'Unassigned')}
+            </span>
+
+            <span class="im-card-meta">
+                Date: ${esc(rec.date || 'Not recorded')}
+            </span>
+
+            <span class="im-card-badges">
+                ${badge(rec.casePriority || 'Normal')}
+                ${badge(rec.status || 'Open')}
+            </span>
+
+        </button>
+    `;
+
+    // Build five workflow columns.
+    const columnsHTML = INVESTIGATION_STAGES.map(stage => {
+
+        const cases = visibleCases.filter(
+            rec => investigationStageFor(rec) === stage
+        );
+
+        return `
+
+            <div class="im-column">
+
+                <div class="im-column-head">
+
+                    <span>${esc(stage)}</span>
+
+                    <span class="im-column-count">
+                        ${cases.length}
+                    </span>
+
+                </div>
+
+                ${
+                    cases.length
+                        ? cases.map(caseCard).join('')
+                        : `<div class="im-empty">No cases</div>`
+                }
+
+            </div>
+        `;
+
+    }).join('');
+
+    const html = `
+
+        <div class="im-board">
+
+            <div class="im-stats">
+
+                <div class="im-stat">
+                    <strong>${allCases.length}</strong>
+                    <span>Total Cases</span>
+                </div>
+
+                <div class="im-stat">
+                    <strong>${activeCases}</strong>
+                    <span>Active Investigations</span>
+                </div>
+
+                <div class="im-stat">
+                    <strong>${urgentCases}</strong>
+                    <span>Urgent Active Cases</span>
+                </div>
+
+                <div class="im-stat">
+                    <strong>${awaitingReview}</strong>
+                    <span>Awaiting Review</span>
+                </div>
+
+            </div>
+
+
+            <div class="im-toolbar">
+
+                <input
+                    id="imSearch"
+                    type="search"
+                    placeholder="Search cases, players, officers..."
+                    value="${esc(investigationSearch)}"
+                >
+
+                <select id="imPriority">
+
+                    ${[
+                        'All',
+                        'Low',
+                        'Normal',
+                        'High',
+                        'Urgent'
+                    ].map(value => `
+                        <option
+                            value="${esc(value)}"
+                            ${investigationPriority === value ? 'selected' : ''}
+                        >
+                            ${value === 'All' ? 'All Priorities' : value}
+                        </option>
+                    `).join('')}
+
+                </select>
+
+                <select id="imOfficer">
+
+                    <option value="All">
+                        All Officers
+                    </option>
+
+                    <option
+                        value="Unassigned"
+                        ${investigationOfficer === 'Unassigned' ? 'selected' : ''}
+                    >
+                        Unassigned
+                    </option>
+
+                    ${officers.map(name => `
+                        <option
+                            value="${esc(name)}"
+                            ${investigationOfficer === name ? 'selected' : ''}
+                        >
+                            ${esc(name)}
+                        </option>
+                    `).join('')}
+
+                </select>
+
+                <button
+                    type="button"
+                    class="primary"
+                    id="imNewCase"
+                >
+                    + New Case
+                </button>
+
+            </div>
+
+
+            <div class="im-columns" id="imColumns">
+                ${columnsHTML}
+            </div>
+
+        </div>
+    `;
+
+    container.innerHTML = html;
+
+    // -------------------------------------------------
+    // SEARCH
+    // -------------------------------------------------
+
+    document.getElementById('imSearch').oninput = event => {
+
+        investigationSearch = event.target.value;
+
+        // Update only the columns so typing remains focused.
+        const filtered = allCases.filter(rec => {
+
+            const text = [
+                rec.id,
+                player(rec.player),
+                rec.type,
+                rec.assignedOfficer,
+                rec.description
+            ].join(' ').toLowerCase();
+
+            return (
+                text.includes(investigationSearch.toLowerCase()) &&
+                (
+                    investigationPriority === 'All' ||
+                    (rec.casePriority || 'Normal') === investigationPriority
+                ) &&
+                (
+                    investigationOfficer === 'All' ||
+                    (
+                        investigationOfficer === 'Unassigned'
+                            ? !rec.assignedOfficer
+                            : rec.assignedOfficer === investigationOfficer
+                    )
+                )
+            );
+        });
+
+        document.getElementById('imColumns').innerHTML =
+            INVESTIGATION_STAGES.map(stage => {
+
+                const cases = filtered.filter(
+                    rec => investigationStageFor(rec) === stage
+                );
+
+                return `
+                    <div class="im-column">
+
+                        <div class="im-column-head">
+                            <span>${esc(stage)}</span>
+                            <span class="im-column-count">
+                                ${cases.length}
+                            </span>
+                        </div>
+
+                        ${
+                            cases.length
+                                ? cases.map(caseCard).join('')
+                                : '<div class="im-empty">No cases</div>'
+                        }
+
+                    </div>
+                `;
+
+            }).join('');
+    };
+
+    // -------------------------------------------------
+    // FILTERS
+    // -------------------------------------------------
+
+    document.getElementById('imPriority').onchange = event => {
+
+        investigationPriority = event.target.value;
+
+        renderInvestigationBoard();
+    };
+
+    document.getElementById('imOfficer').onchange = event => {
+
+        investigationOfficer = event.target.value;
+
+        renderInvestigationBoard();
+    };
+
+    // -------------------------------------------------
+    // CREATE NEW CASE
+    // -------------------------------------------------
+
+    document.getElementById('imNewCase').onclick = () => {
+
+        page = 'infractions';
+        render();
+        edit(null);
+    };
+
+    // -------------------------------------------------
+    // OPEN CASE
+    // -------------------------------------------------
+
+    document.getElementById('imColumns').onclick = event => {
+
+        const card = event.target.closest('[data-im-case]');
+
+        if (!card) return;
+
+        page = 'infractions';
+        render();
+
+        openRecord(card.dataset.imCase);
+    };
+}
+
+
+// -----------------------------------------------------
+// CONNECT THE BOARD TO EXISTING NAVIGATION
+// -----------------------------------------------------
+
+const renderBeforeInvestigations = render;
+
+render = function () {
+
+    if (page === 'investigations') {
+
+        // The original renderer expects every page to have
+        // a database. Handle this page separately.
+
+        nav();
+
+        document.getElementById('title').textContent =
+            'Investigation Management';
+
+        document.getElementById('crumb').textContent =
+            'Investigations';
+
+        document.getElementById('subtitle').textContent =
+            'Track investigations, assignments and case progress';
+
+        document.getElementById('add').style.display = 'none';
+
+        renderInvestigationBoard();
+
+        // Refresh notification indicators.
+        if (typeof renderNotificationCentre === 'function') {
+            renderNotificationCentre();
+        }
+
+        return;
+    }
+
+    renderBeforeInvestigations();
+};
 // Render the workspace.
 render();
 
