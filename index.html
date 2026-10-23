@@ -2285,6 +2285,91 @@
     .profile-section .tablewrap table{min-width:420px}
     .profile-notes{white-space:pre-wrap;line-height:1.6;overflow-wrap:anywhere}
     @media(max-width:600px){.profile-properties{grid-template-columns:1fr}}
+
+   /* PLAYER HISTORY TIMELINE */
+
+.ph-timeline {
+    position: relative;
+    margin: 18px 0;
+    padding-left: 24px;
+    border-left: 2px solid #66313e;
+}
+
+.ph-event {
+    position: relative;
+    padding: 0 0 22px 18px;
+}
+
+.ph-event:last-child {
+    padding-bottom: 0;
+}
+
+.ph-event::before {
+    content: "";
+    position: absolute;
+    left: -31px;
+    top: 5px;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: #d43a52;
+    border: 3px solid #211e22;
+}
+
+.ph-card {
+    padding: 15px;
+    border: 1px solid #49343e;
+    border-radius: 9px;
+    background: #282329;
+}
+
+.ph-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 9px;
+}
+
+.ph-type {
+    color: #f18b9b;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.ph-date {
+    color: #a99fa7;
+    font-size: 11px;
+}
+
+.ph-title {
+    font-weight: 700;
+    color: #f5edf0;
+    margin-bottom: 8px;
+}
+
+.ph-details {
+    color: #bdb1b9;
+    font-size: 12px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.ph-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.ph-empty {
+    color: #a99fa7;
+    padding: 18px 0;
+}
+   
   </style>
  </head>
  <body>
@@ -3190,6 +3275,172 @@ function showEnhancedInfractionCase(caseId) {
     });
 }
 
+   // ============================================
+// PLAYER HISTORY TIMELINE
+// ============================================
+
+function renderPlayerHistoryTimeline(playerId) {
+
+    const events = [];
+
+    const addEvent = (type, title, date, details, status, recordId, targetPage) => {
+        const parsed = date ? new Date(date) : null;
+        const timestamp = parsed && !Number.isNaN(parsed.getTime())
+            ? parsed.getTime()
+            : null;
+
+        events.push({
+            type,
+            title,
+            date,
+            timestamp,
+            details,
+            status,
+            recordId,
+            targetPage
+        });
+    };
+
+    // Infractions
+    data.infractions
+        .filter(item => item.player === playerId)
+        .forEach(item => {
+            addEvent(
+                'Infraction',
+                item.type || 'Rule violation',
+                item.date,
+                item.description || 'No incident description.',
+                item.status,
+                item.id,
+                'infractions'
+            );
+        });
+
+    // Punishments
+    data.punishments
+        .filter(item => item.player === playerId)
+        .forEach(item => {
+            addEvent(
+                'Punishment',
+                item.action || 'Enforcement action',
+                item.date,
+                item.notes || item.duration || 'No additional notes.',
+                item.status,
+                item.id,
+                'punishments'
+            );
+
+            if (item.revokedAt) {
+                addEvent(
+                    'Punishment Revoked',
+                    item.action || 'Punishment revoked',
+                    item.revokedAt,
+                    item.revocationReason || 'No reason recorded.',
+                    'Revoked',
+                    item.id,
+                    'punishments'
+                );
+            }
+        });
+
+    // Appeals
+    data.appeals
+        .filter(item => item.player === playerId)
+        .forEach(item => {
+            addEvent(
+                'Appeal',
+                `Appeal ${item.id}`,
+                item.date || item.createdAt,
+                item.reason || 'No appeal statement.',
+                item.status,
+                item.id,
+                'appeals'
+            );
+        });
+
+    // Recorded audit activity
+    const playerRecordIds = new Set([
+        playerId,
+        ...data.infractions
+            .filter(item => item.player === playerId)
+            .map(item => item.id),
+        ...data.punishments
+            .filter(item => item.player === playerId)
+            .map(item => item.id),
+        ...data.appeals
+            .filter(item => item.player === playerId)
+            .map(item => item.id)
+    ]);
+
+    (data.activity || [])
+        .filter(item => playerRecordIds.has(item.recordId))
+        .forEach(item => {
+            const targetPage = {
+                players: 'players',
+                infractions: 'infractions',
+                punishments: 'punishments',
+                appeals: 'appeals'
+            }[item.section];
+
+            addEvent(
+                'Activity',
+                item.action || 'Record updated',
+                item.time,
+                item.details || 'Enforcement activity recorded.',
+                '',
+                targetPage ? item.recordId : null,
+                targetPage || null
+            );
+        });
+
+    // Most recent first. Undated records appear last.
+    events.sort((a, b) =>
+        (b.timestamp ?? -Infinity) - (a.timestamp ?? -Infinity)
+    );
+
+    if (!events.length) {
+        return '<p class="ph-empty">No player history recorded yet.</p>';
+    }
+
+    const formatDate = event => event.timestamp !== null
+        ? new Date(event.timestamp).toLocaleString('en-AU')
+        : 'Date not recorded';
+
+    return `
+        <div class="ph-timeline">
+            ${events.map(event => `
+                <div class="ph-event">
+                    <div class="ph-card">
+                        <div class="ph-top">
+                            <span class="ph-type">${esc(event.type)}</span>
+                            <span class="ph-date">${esc(formatDate(event))}</span>
+                        </div>
+
+                        <div class="ph-title">${esc(event.title)}</div>
+
+                        <div class="ph-details">${esc(event.details)}</div>
+
+                        <div class="ph-footer">
+                            ${event.status ? badge(event.status) : '<span></span>'}
+
+                            ${event.recordId && event.targetPage ? `
+                                <button
+                                    type="button"
+                                    class="secondary"
+                                    data-history-record="${esc(event.recordId)}"
+                                    data-history-page="${esc(event.targetPage)}"
+                                >
+                                    View Record →
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
    
    // =====================================================
 // RECORD VIEWER, PLAYER PROFILES & CASE TRACKING
@@ -3297,6 +3548,16 @@ if (section === 'infractions') {
                 </p>
             </section>
 
+                        <section class="profile-section">
+                <h3>Player History Timeline</h3>
+                <p class="muted">
+                    Chronological history of infractions, punishments,
+                    appeals and recorded enforcement activity.
+                </p>
+
+                ${renderPlayerHistoryTimeline(rec.id)}
+            </section>
+
             ${linked(
                 'Infractions',
                 cases,
@@ -3354,6 +3615,18 @@ if (section === 'infractions') {
         `;
 
         modal('Player profile', profile);
+
+             document.querySelectorAll('[data-history-record]')
+            .forEach(button => {
+
+                button.onclick = () => {
+                    const recordId = button.dataset.historyRecord;
+                    const targetPage = button.dataset.historyPage;
+
+                    openLinkedRecord(recordId, targetPage);
+                };
+
+            });
 
         document.getElementById('cancel').onclick = () => {
             close();
