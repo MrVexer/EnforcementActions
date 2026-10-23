@@ -3542,6 +3542,80 @@ function renderPlayerHistoryTimeline(playerId) {
 // RECORD VIEWER, PLAYER PROFILES & CASE TRACKING
 // =====================================================
 
+// ============================================
+// DELETE PLAYER PROFILE
+// ============================================
+
+function deletePlayerProfile(playerId) {
+
+    const member = data.players.find(p => p.id === playerId);
+
+    if (!member) {
+        alert('Player profile not found.');
+        return;
+    }
+
+    const infractionCount = data.infractions.filter(
+        item => item.player === playerId
+    ).length;
+
+    const punishmentCount = data.punishments.filter(
+        item => item.player === playerId
+    ).length;
+
+    const appealCount = data.appeals.filter(
+        item => item.player === playerId
+    ).length;
+
+    if (infractionCount || punishmentCount || appealCount) {
+        alert(
+            `Cannot delete ${member.name}.\n\n` +
+            `This player has linked enforcement records:\n` +
+            `Infractions: ${infractionCount}\n` +
+            `Punishments: ${punishmentCount}\n` +
+            `Appeals: ${appealCount}\n\n` +
+            `Deletion is blocked to protect enforcement history.`
+        );
+        return;
+    }
+
+    const confirmation = prompt(
+        `PERMANENT PLAYER DELETION\n\n` +
+        `Player: ${member.name}\n` +
+        `Player ID: ${member.id}\n\n` +
+        `This action cannot be undone.\n\n` +
+        `Type DELETE to confirm:`
+    );
+
+    if (confirmation !== 'DELETE') {
+        return;
+    }
+
+    // Keep a snapshot for the audit log.
+    const previousRecord = structuredClone(member);
+
+    // Remove the player without changing other IDs.
+    data.players = data.players.filter(
+        item => item.id !== playerId
+    );
+
+    logAudit(
+        'Player profile deleted',
+        'players',
+        playerId,
+        previousRecord,
+        null,
+        `Deleted player profile: ${member.name} (${playerId})`
+    );
+
+    save();
+    close();
+    page = 'players';
+    render();
+
+    alert('Player profile successfully deleted.');
+}
+   
 function openRecord(id){
 
     const section = page === 'overview' ? 'infractions' : page;
@@ -3695,6 +3769,14 @@ if (section === 'infractions') {
                 <button class="primary" id="editRecord">
                     Edit player
                 </button>
+                <button
+    type="button"
+    class="secondary"
+    id="deletePlayer"
+    style="border-color:#a82b40;color:#ff8b9b;"
+>
+    Delete Player
+</button>
                 ${
     section === 'punishments' && rec.status !== 'Revoked'
         ? `
@@ -3733,6 +3815,9 @@ if (section === 'infractions') {
         document.getElementById('editRecord').onclick = () => {
             edit(rec);
         };
+     document.getElementById('deletePlayer').onclick = () => {
+    deletePlayerProfile(rec.id);
+};
 
      // Revoke punishment button.
 if (section === 'punishments') {
