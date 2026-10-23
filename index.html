@@ -3140,6 +3140,153 @@
         padding: 10px;
     }
 }
+
+   /* ==========================================
+   ADVANCED PERMISSION MANAGEMENT
+========================================== */
+
+.apm-panel {
+    margin-top: 20px;
+    padding: 22px;
+    background: #211e22;
+    border: 1px solid #49343e;
+    border-radius: 12px;
+}
+
+.apm-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.apm-header h2 {
+    margin: 0 0 6px;
+    font-size: 19px;
+}
+
+.apm-toolbar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+
+.apm-toolbar select {
+    min-width: 220px;
+    max-width: 100%;
+}
+
+.apm-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.apm-stat {
+    padding: 15px;
+    background: #2d252b;
+    border: 1px solid #49343e;
+    border-radius: 9px;
+}
+
+.apm-stat strong {
+    display: block;
+    font-size: 24px;
+    color: #f1b0bf;
+}
+
+.apm-stat small {
+    color: #b7aab2;
+    font-size: 11px;
+}
+
+.apm-group {
+    margin-bottom: 12px;
+    overflow: hidden;
+    border: 1px solid #49343e;
+    border-radius: 9px;
+}
+
+.apm-group-title {
+    padding: 12px 15px;
+    background: #352830;
+    font-size: 13px;
+    font-weight: 700;
+    color: #f4dfe6;
+}
+
+.apm-permission {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 13px 15px;
+    border-top: 1px solid #40333b;
+}
+
+.apm-permission:first-of-type {
+    border-top: none;
+}
+
+.apm-permission strong {
+    display: block;
+    font-size: 12px;
+}
+
+.apm-permission small {
+    display: block;
+    margin-top: 4px;
+    color: #aaa0a8;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.apm-switch {
+    flex-shrink: 0;
+    width: 19px;
+    height: 19px;
+    accent-color: #d32b3e;
+    cursor: pointer;
+}
+
+.apm-footer {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.apm-notice {
+    margin-top: 15px;
+    padding: 13px;
+    background: #302720;
+    border: 1px solid #66503b;
+    border-radius: 8px;
+    color: #e7caa3;
+    font-size: 12px;
+    line-height: 1.7;
+}
+
+.apm-dirty {
+    color: #f0c989;
+    font-size: 12px;
+}
+
+@media (max-width: 650px) {
+    .apm-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .apm-permission {
+        align-items: flex-start;
+    }
+}
    
   </style>
  </head>
@@ -10458,6 +10605,652 @@ renderStaffAdministration = function () {
     pageContainer.appendChild(mount);
 
     drhRefresh();
+};
+
+   // =====================================================
+// VENGEFUL REALMS — ADVANCED PERMISSION MANAGEMENT
+// =====================================================
+
+// Local configuration only.
+// These settings do not enforce browser or server access.
+
+const APM_CATALOG = [
+    {
+        group: 'Player Management',
+        items: [
+            ['players.view', 'View Player Records',
+                'Access player profiles and player history.'],
+            ['players.create', 'Create Player Records',
+                'Add new player records.'],
+            ['players.edit', 'Edit Player Records',
+                'Modify existing player information.'],
+            ['players.delete', 'Delete Player Records',
+                'Remove eligible player records.']
+        ]
+    },
+    {
+        group: 'Infraction Management',
+        items: [
+            ['infractions.view', 'View Infractions',
+                'Access infraction records and case details.'],
+            ['infractions.create', 'Create Infractions',
+                'Record new rule violations.'],
+            ['infractions.edit', 'Edit Infractions',
+                'Update existing infraction records.'],
+            ['infractions.delete', 'Delete Infractions',
+                'Remove infraction records.']
+        ]
+    },
+    {
+        group: 'Punishment Management',
+        items: [
+            ['punishments.view', 'View Punishments',
+                'Access punishment records.'],
+            ['punishments.issue', 'Issue Punishments',
+                'Create new punishment records.'],
+            ['punishments.edit', 'Edit Punishments',
+                'Update punishment information.'],
+            ['punishments.revoke', 'Revoke Punishments',
+                'Revoke or reverse punishments.'],
+            ['punishments.delete', 'Delete Punishments',
+                'Remove punishment records.']
+        ]
+    },
+    {
+        group: 'Investigation Management',
+        items: [
+            ['investigations.view', 'View Investigations',
+                'Access investigations and case information.'],
+            ['investigations.create', 'Create Investigations',
+                'Open new investigations.'],
+            ['investigations.edit', 'Edit Investigations',
+                'Update investigation progress.'],
+            ['investigations.assign', 'Assign Investigations',
+                'Assign cases to enforcement officers.'],
+            ['investigations.close', 'Close Investigations',
+                'Mark investigations as closed.']
+        ]
+    },
+    {
+        group: 'Staff & Tasks',
+        items: [
+            ['staff.view', 'View Staff Directory',
+                'Access staff profiles.'],
+            ['staff.manage', 'Manage Staff Records',
+                'Create and edit staff records.'],
+            ['staff.remove', 'Remove Staff Records',
+                'Remove staff directory entries.'],
+            ['tasks.view', 'View Staff Tasks',
+                'Access the staff task board.'],
+            ['tasks.create', 'Create Staff Tasks',
+                'Create new tasks.'],
+            ['tasks.assign', 'Assign Staff Tasks',
+                'Assign tasks to staff members.'],
+            ['tasks.manage', 'Manage Staff Tasks',
+                'Update and complete tasks.']
+        ]
+    },
+    {
+        group: 'Appeals & Documents',
+        items: [
+            ['appeals.view', 'View Appeals',
+                'Access appeal records.'],
+            ['appeals.manage', 'Manage Appeals',
+                'Update appeal status and outcomes.'],
+            ['docs.view', 'View Documents',
+                'Access the staff document library.'],
+            ['docs.manage', 'Manage Documents',
+                'Add, edit and remove document links.']
+        ]
+    },
+    {
+        group: 'Administration & Security',
+        items: [
+            ['audit.view', 'View Audit Log',
+                'Access the enforcement audit history.'],
+            ['settings.manage', 'Manage Website Settings',
+                'Modify administrative settings.'],
+            ['permissions.manage', 'Manage Permissions',
+                'Change permission configurations.'],
+            ['discord.manage', 'Manage Discord Configuration',
+                'Change Discord role mappings and hierarchy.']
+        ]
+    }
+];
+
+const APM_ALL_KEYS = APM_CATALOG.flatMap(group =>
+    group.items.map(item => item[0])
+);
+
+const APM_ROLES = Object.keys(SA_PERMISSIONS);
+
+let apmSelectedRole = APM_ROLES[0];
+let apmDraft = null;
+let apmDirty = false;
+
+// =====================================================
+// DEFAULT PERMISSION PRESETS
+// =====================================================
+
+function apmDefaultPermissions(role) {
+
+    const permissions = Object.fromEntries(
+        APM_ALL_KEYS.map(key => [key, false])
+    );
+
+    const sections = SA_PERMISSIONS[role] || [];
+
+    // Derive basic viewing permissions from existing roles.
+    sections.forEach(section => {
+
+        const viewKey = `${section}.view`;
+
+        if (viewKey in permissions) {
+            permissions[viewKey] = true;
+        }
+
+    });
+
+    // Map existing section names to relevant view access.
+    if (sections.includes('audit')) {
+        permissions['audit.view'] = true;
+    }
+
+    // Assign conservative action presets.
+    const grants = {
+
+        'Operations Manager': APM_ALL_KEYS,
+
+        'Head of Enforcement': [
+            'players.create',
+            'players.edit',
+            'infractions.create',
+            'infractions.edit',
+            'infractions.delete',
+            'punishments.issue',
+            'punishments.edit',
+            'punishments.revoke',
+            'punishments.delete',
+            'investigations.create',
+            'investigations.edit',
+            'investigations.assign',
+            'investigations.close',
+            'staff.manage',
+            'staff.remove',
+            'tasks.create',
+            'tasks.assign',
+            'tasks.manage',
+            'appeals.manage',
+            'docs.manage',
+            'permissions.manage',
+            'discord.manage'
+        ],
+
+        'Enforcement Captain': [
+            'players.create',
+            'players.edit',
+            'infractions.create',
+            'infractions.edit',
+            'punishments.issue',
+            'punishments.edit',
+            'punishments.revoke',
+            'investigations.create',
+            'investigations.edit',
+            'investigations.assign',
+            'investigations.close',
+            'staff.manage',
+            'tasks.create',
+            'tasks.assign',
+            'tasks.manage',
+            'appeals.manage',
+            'docs.manage'
+        ],
+
+        'Enforcement Officer': [
+            'players.create',
+            'players.edit',
+            'infractions.create',
+            'infractions.edit',
+            'punishments.issue',
+            'punishments.edit',
+            'investigations.create',
+            'investigations.edit',
+            'tasks.manage'
+        ],
+
+        'Trial Enforcement': [
+            'infractions.create',
+            'tasks.manage'
+        ],
+
+        'Support Team': [
+            'tasks.manage'
+        ],
+
+        'Story Team': []
+    };
+
+    (grants[role] || []).forEach(key => {
+
+        if (key in permissions) {
+            permissions[key] = true;
+        }
+
+    });
+
+    return permissions;
+}
+
+// =====================================================
+// SAVED CONFIGURATION
+// =====================================================
+
+function apmSavedPermissions(role) {
+
+    const defaults = apmDefaultPermissions(role);
+
+    const saved = data.advancedPermissions?.[role];
+
+    if (!saved || typeof saved !== 'object') {
+        return defaults;
+    }
+
+    APM_ALL_KEYS.forEach(key => {
+
+        if (typeof saved[key] === 'boolean') {
+            defaults[key] = saved[key];
+        }
+
+    });
+
+    return defaults;
+}
+
+function apmGetDraft() {
+
+    if (!apmDraft) {
+        apmDraft = apmSavedPermissions(apmSelectedRole);
+    }
+
+    return apmDraft;
+}
+
+function apmPermissionCount(permissions) {
+
+    return APM_ALL_KEYS.filter(key =>
+        permissions[key] === true
+    ).length;
+}
+
+// =====================================================
+// RENDER
+// =====================================================
+
+function apmRenderManager() {
+
+    const permissions = apmGetDraft();
+
+    const enabled = apmPermissionCount(permissions);
+
+    const total = APM_ALL_KEYS.length;
+
+    const roleOptions = APM_ROLES.map(role => `
+
+        <option
+            value="${esc(role)}"
+            ${role === apmSelectedRole ? 'selected' : ''}>
+            ${esc(role)}
+        </option>
+
+    `).join('');
+
+    const groups = APM_CATALOG.map(group => {
+
+        const rows = group.items.map(item => {
+
+            const [key, title, description] = item;
+
+            return `
+                <label class="apm-permission">
+
+                    <span>
+                        <strong>${esc(title)}</strong>
+                        <small>${esc(description)}</small>
+                    </span>
+
+                    <input
+                        class="apm-switch"
+                        type="checkbox"
+                        data-apm-key="${esc(key)}"
+                        ${permissions[key] ? 'checked' : ''}
+                    >
+
+                </label>
+            `;
+
+        }).join('');
+
+        return `
+            <div class="apm-group">
+
+                <div class="apm-group-title">
+                    ${esc(group.group)}
+                </div>
+
+                ${rows}
+
+            </div>
+        `;
+
+    }).join('');
+
+    return `
+        <section class="apm-panel">
+
+            <div class="apm-header">
+
+                <div>
+                    <h2>Advanced Permission Management</h2>
+
+                    <p class="drc-muted">
+                        Configure individual action permissions
+                        for each staff role.
+                    </p>
+                </div>
+
+                <span class="sa-tag">
+                    Local Configuration
+                </span>
+
+            </div>
+
+            <div class="apm-toolbar">
+
+                <label for="apmRoleSelect">
+                    Staff Role
+                </label>
+
+                <select id="apmRoleSelect">
+                    ${roleOptions}
+                </select>
+
+                <span
+                    class="apm-dirty"
+                    id="apmDirty"
+                    style="${apmDirty ? '' : 'display:none'}">
+                    Unsaved Changes
+                </span>
+
+            </div>
+
+            <div class="apm-summary">
+
+                <div class="apm-stat">
+                    <strong id="apmEnabledCount">
+                        ${enabled}
+                    </strong>
+                    <small>Enabled Permissions</small>
+                </div>
+
+                <div class="apm-stat">
+                    <strong>${total - enabled}</strong>
+                    <small>Disabled Permissions</small>
+                </div>
+
+                <div class="apm-stat">
+                    <strong>${total}</strong>
+                    <small>Available Permissions</small>
+                </div>
+
+            </div>
+
+            ${groups}
+
+            <div class="apm-footer">
+
+                <button
+                    type="button"
+                    class="secondary"
+                    id="apmReset">
+                    Reset to Defaults
+                </button>
+
+                <button
+                    type="button"
+                    class="secondary"
+                    id="apmDiscard">
+                    Discard Changes
+                </button>
+
+                <button
+                    type="button"
+                    class="primary"
+                    id="apmSave">
+                    Save Permissions
+                </button>
+
+            </div>
+
+            <div class="apm-notice">
+
+                <strong>
+                    Security Status: Configuration Only
+                </strong>
+
+                <p>
+                    These settings are not currently enforced.
+                    Changing a checkbox does not restrict
+                    access to pages, buttons or records.
+                </p>
+
+                <p>
+                    Secure enforcement will require a backend
+                    that validates Discord roles and checks
+                    permissions for every protected action.
+                </p>
+
+            </div>
+
+        </section>
+    `;
+}
+
+// =====================================================
+// EVENTS
+// =====================================================
+
+function apmUpdateCounters() {
+
+    const permissions = apmGetDraft();
+
+    const enabled = apmPermissionCount(permissions);
+
+    const stats = document.querySelectorAll(
+        '#apmManagerMount .apm-stat strong'
+    );
+
+    if (stats.length >= 2) {
+        stats[0].textContent = enabled;
+        stats[1].textContent =
+            APM_ALL_KEYS.length - enabled;
+    }
+
+    const dirty = document.getElementById('apmDirty');
+
+    if (dirty) {
+        dirty.style.display =
+            apmDirty ? '' : 'none';
+    }
+}
+
+function apmBindManager() {
+
+    const selector = document.getElementById(
+        'apmRoleSelect'
+    );
+
+    if (!selector) return;
+
+    selector.onchange = () => {
+
+        if (
+            apmDirty &&
+            !confirm(
+                'Discard unsaved permission changes ' +
+                'before switching roles?'
+            )
+        ) {
+            selector.value = apmSelectedRole;
+            return;
+        }
+
+        apmSelectedRole = selector.value;
+
+        apmDraft = apmSavedPermissions(apmSelectedRole);
+
+        apmDirty = false;
+
+        apmRefresh();
+    };
+
+    document.querySelectorAll('[data-apm-key]')
+        .forEach(input => {
+
+            input.onchange = () => {
+
+                const key = input.dataset.apmKey;
+
+                if (!APM_ALL_KEYS.includes(key)) {
+                    return;
+                }
+
+                apmGetDraft()[key] = input.checked;
+
+                apmDirty = true;
+
+                apmUpdateCounters();
+            };
+
+        });
+
+    document.getElementById('apmReset').onclick = () => {
+
+        if (!confirm(
+            'Reset this role to its default permissions?\n\n' +
+            'Changes will remain unsaved until you click Save.'
+        )) return;
+
+        apmDraft = apmDefaultPermissions(
+            apmSelectedRole
+        );
+
+        apmDirty = true;
+
+        apmRefresh();
+    };
+
+    document.getElementById('apmDiscard').onclick = () => {
+
+        if (
+            apmDirty &&
+            !confirm('Discard unsaved permission changes?')
+        ) return;
+
+        apmDraft = apmSavedPermissions(
+            apmSelectedRole
+        );
+
+        apmDirty = false;
+
+        apmRefresh();
+    };
+
+    document.getElementById('apmSave').onclick = () => {
+
+        const role = apmSelectedRole;
+
+        const previous = apmSavedPermissions(role);
+
+        const next = { ...apmGetDraft() };
+
+        if (
+            !data.advancedPermissions ||
+            typeof data.advancedPermissions !== 'object' ||
+            Array.isArray(data.advancedPermissions)
+        ) {
+            data.advancedPermissions = {};
+        }
+
+        data.advancedPermissions[role] = next;
+
+        save();
+
+        if (typeof logAudit === 'function') {
+
+            logAudit(
+                'Advanced permissions updated',
+                'staffadmin',
+                role,
+                previous,
+                next,
+                'Local action permissions updated for ' + role
+            );
+
+        }
+
+        apmDraft = { ...next };
+
+        apmDirty = false;
+
+        apmRefresh();
+
+        alert(
+            'Permissions saved locally for ' + role + '.'
+        );
+    };
+}
+
+// =====================================================
+// REFRESH MANAGER
+// =====================================================
+
+function apmRefresh() {
+
+    const mount = document.getElementById(
+        'apmManagerMount'
+    );
+
+    if (!mount) return;
+
+    mount.innerHTML = apmRenderManager();
+
+    apmBindManager();
+}
+
+// =====================================================
+// EXTEND STAFF ADMINISTRATION
+// =====================================================
+
+const renderStaffAdminBeforeAdvancedPermissions =
+    renderStaffAdministration;
+
+renderStaffAdministration = function () {
+
+    renderStaffAdminBeforeAdvancedPermissions();
+
+    const pageContainer = document.querySelector(
+        '.sa-page'
+    );
+
+    if (!pageContainer) return;
+
+    const mount = document.createElement('div');
+
+    mount.id = 'apmManagerMount';
+
+    pageContainer.appendChild(mount);
+
+    apmRefresh();
 };
    
 // Render the workspace.
