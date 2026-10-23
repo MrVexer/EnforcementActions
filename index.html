@@ -2694,6 +2694,169 @@
     border: 1px dashed #49353f;
     border-radius: 10px;
 }
+
+   /* ==========================================
+   STAFF ADMINISTRATION PANEL
+========================================== */
+
+.sa-page {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.sa-hero {
+    padding: 24px;
+    border: 1px solid #65313d;
+    border-radius: 12px;
+    background: linear-gradient(110deg, #351c25, #1c1b1f 75%);
+}
+
+.sa-hero h2 {
+    margin: 0 0 8px;
+    color: #fff;
+    font-size: 22px;
+}
+
+.sa-hero p {
+    margin: 0;
+    color: #bdb1b9;
+    line-height: 1.6;
+}
+
+.sa-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.sa-stat, .sa-panel {
+    padding: 19px;
+    border: 1px solid #40333a;
+    border-radius: 11px;
+    background: #211e22;
+}
+
+.sa-stat strong {
+    display: block;
+    font-size: 28px;
+    color: #fff;
+    margin-bottom: 8px;
+}
+
+.sa-stat span {
+    color: #aaa0a8;
+    font-size: 12px;
+}
+
+.sa-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.sa-toolbar input {
+    flex: 1;
+    min-width: 200px;
+}
+
+.sa-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+}
+
+.sa-card {
+    padding: 18px;
+    background: #292329;
+    border: 1px solid #49343e;
+    border-radius: 10px;
+}
+
+.sa-card h3 {
+    margin: 0 0 7px;
+    font-size: 16px;
+}
+
+.sa-meta {
+    color: #b7aab2;
+    font-size: 12px;
+    line-height: 1.9;
+    overflow-wrap: anywhere;
+}
+
+.sa-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin: 12px 0;
+}
+
+.sa-tag {
+    padding: 5px 9px;
+    border-radius: 6px;
+    background: #3d2b34;
+    color: #e9c2cb;
+    font-size: 11px;
+}
+
+.sa-tag.good {
+    background: #203b30;
+    color: #a9e3c3;
+}
+
+.sa-tag.warn {
+    background: #493820;
+    color: #f4d49c;
+}
+
+.sa-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+}
+
+.sa-permissions {
+    width: 100%;
+    min-width: 750px;
+    border-collapse: collapse;
+}
+
+.sa-permissions th,
+.sa-permissions td {
+    text-align: center;
+}
+
+.sa-permissions th:first-child,
+.sa-permissions td:first-child {
+    text-align: left;
+}
+
+.sa-yes {
+    color: #82dca7;
+    font-weight: 700;
+}
+
+.sa-no {
+    color: #766c74;
+}
+
+.sa-note {
+    padding: 14px;
+    background: #302720;
+    border: 1px solid #66503b;
+    border-radius: 9px;
+    color: #e7caa3;
+    font-size: 12px;
+    line-height: 1.7;
+}
+
+@media (max-width: 750px) {
+    .sa-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
    
   </style>
  </head>
@@ -2821,6 +2984,13 @@ KEYS.push('staff');
 
 LABEL.staff = 'Staff Directory';
 ICON.staff = '♙';
+   // Register Staff Administration
+if (!KEYS.includes('staffadmin')) {
+    KEYS.push('staffadmin');
+}
+
+LABEL.staffadmin = 'Staff Administration';
+ICON.staffadmin = '⚙';
    // Staff Document Library
 if (!KEYS.includes('docs')) {
     KEYS.push('docs');
@@ -8556,6 +8726,519 @@ render = function () {
     }
 
     renderBeforeDocsLibrary();
+};
+
+   // =====================================================
+// VENGEFUL REALMS — STAFF ADMINISTRATION
+// =====================================================
+
+let saSearch = '';
+let saRoleFilter = 'All';
+
+// Permission definitions for future Discord RBAC.
+// These are UI previews, NOT enforced security rules.
+
+const SA_PERMISSIONS = {
+    'Operations Manager': [
+        'players', 'infractions', 'punishments',
+        'investigations', 'tasks', 'docs',
+        'staff', 'audit', 'settings'
+    ],
+
+    'Head of Enforcement': [
+        'players', 'infractions', 'punishments',
+        'investigations', 'tasks', 'docs',
+        'staff', 'audit'
+    ],
+
+    'Enforcement Captain': [
+        'players', 'infractions', 'punishments',
+        'investigations', 'tasks', 'docs',
+        'staff', 'audit'
+    ],
+
+    'Enforcement Officer': [
+        'players', 'infractions', 'punishments',
+        'investigations', 'tasks', 'docs'
+    ],
+
+    'Trial Enforcement': [
+        'players', 'infractions', 'tasks', 'docs'
+    ],
+
+    'Support Team': [
+        'tasks', 'docs'
+    ],
+
+    'Story Team': [
+        'docs'
+    ]
+};
+
+const SA_FEATURES = [
+    ['players', 'Player Database'],
+    ['infractions', 'Infractions'],
+    ['punishments', 'Punishments'],
+    ['investigations', 'Investigations'],
+    ['tasks', 'Staff Tasks'],
+    ['docs', 'Docs Library'],
+    ['staff', 'Staff Directory Management'],
+    ['audit', 'Audit Logs'],
+    ['settings', 'System Administration']
+];
+
+function saDiscordId(member) {
+
+    // The current Staff Directory uses one field for
+    // either a Discord username or a Discord user ID.
+
+    const value = String(member.discord || '').trim();
+
+    return /^\d{17,20}$/.test(value) ? value : '';
+}
+
+function saAccountStatus(member) {
+
+    if (member.status === 'Inactive') {
+        return 'Inactive';
+    }
+
+    if (member.status === 'On Leave') {
+        return 'On Leave';
+    }
+
+    return 'Active';
+}
+
+function saTaskCount(member) {
+
+    return (data.tasks || []).filter(task =>
+        task.assignedTo === member.id &&
+        task.status !== 'Completed'
+    ).length;
+}
+
+function saCaseCount(member) {
+
+    return (data.infractions || []).filter(rec => {
+
+        const assigned =
+            rec.assignedOfficerId === member.id ||
+            (
+                !rec.assignedOfficerId &&
+                rec.assignedOfficer === member.name
+            );
+
+        return assigned &&
+            (
+                typeof investigationStageFor !== 'function' ||
+                investigationStageFor(rec) !== 'Closed'
+            );
+    }).length;
+}
+
+function saOpenStaff(memberId) {
+
+    if (!staffById(memberId)) {
+        alert('Staff member not found.');
+        return;
+    }
+
+    page = 'staff';
+    render();
+    openStaffProfile(memberId);
+}
+
+function saEditStaff(memberId) {
+
+    const member = staffById(memberId);
+
+    if (!member) return;
+
+    openStaffEditor(member);
+}
+
+function saRenderPermissions() {
+
+    const roles = Object.keys(SA_PERMISSIONS);
+
+    return `
+        <div class="sa-panel">
+
+            <h2>Role Permission Matrix</h2>
+
+            <p class="muted">
+                Planned website permissions for each Discord staff role.
+            </p>
+
+            <div class="tablewrap">
+
+                <table class="sa-permissions">
+
+                    <thead>
+                        <tr>
+                            <th>Feature</th>
+
+                            ${roles.map(role => `
+                                <th>${esc(role)}</th>
+                            `).join('')}
+                        </tr>
+                    </thead>
+
+                    <tbody>
+
+                        ${SA_FEATURES.map(([key, label]) => `
+                            <tr>
+                                <td>${esc(label)}</td>
+
+                                ${roles.map(role => {
+
+                                    const allowed =
+                                        SA_PERMISSIONS[role].includes(key);
+
+                                    return `
+                                        <td>
+                                            <span class="${
+                                                allowed ? 'sa-yes' : 'sa-no'
+                                            }">
+                                                ${allowed ? '✓' : '—'}
+                                            </span>
+                                        </td>
+                                    `;
+                                }).join('')}
+
+                            </tr>
+                        `).join('')}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+            <div class="sa-note" style="margin-top:15px;">
+                These permissions are planned settings only.
+                They do not currently restrict access or authorise
+                website actions. Discord authentication and
+                server-side permission checks will be required.
+            </div>
+
+        </div>
+    `;
+}
+
+function renderStaffAdministration() {
+
+    const members = data.staff || [];
+
+    const active = members.filter(member =>
+        member.status === 'Active'
+    ).length;
+
+    const linked = members.filter(member =>
+        Boolean(saDiscordId(member))
+    ).length;
+
+    const pending = members.length - linked;
+
+    const roles = [...new Set([
+        ...Object.keys(SA_PERMISSIONS),
+        ...members.map(member => member.role).filter(Boolean)
+    ])];
+
+    const visible = members.filter(member => {
+
+        const searchable = [
+            member.name,
+            member.discord,
+            member.role,
+            member.status,
+            member.id
+        ].join(' ').toLowerCase();
+
+        return (
+            searchable.includes(saSearch.toLowerCase()) &&
+            (
+                saRoleFilter === 'All' ||
+                member.role === saRoleFilter
+            )
+        );
+    });
+
+    document.getElementById('content').innerHTML = `
+        <div class="sa-page">
+
+            <div class="sa-hero">
+
+                <h2>Staff Administration</h2>
+
+                <p>
+                    Manage staff records, review planned access levels,
+                    and prepare Discord account linking.
+                </p>
+
+            </div>
+
+            <div class="sa-stats">
+
+                <div class="sa-stat">
+                    <strong>${members.length}</strong>
+                    <span>Total Staff</span>
+                </div>
+
+                <div class="sa-stat">
+                    <strong>${active}</strong>
+                    <span>Active Staff</span>
+                </div>
+
+                <div class="sa-stat">
+                    <strong>${linked}</strong>
+                    <span>Discord IDs Recorded</span>
+                </div>
+
+                <div class="sa-stat">
+                    <strong>${pending}</strong>
+                    <span>Discord IDs Missing</span>
+                </div>
+
+            </div>
+
+            <div class="sa-note">
+                Authentication is not connected.
+                A recorded Discord ID is not proof of account
+                ownership, server membership, or verified roles.
+                Account access cannot be granted or revoked here yet.
+            </div>
+
+            <div class="sa-panel">
+
+                <div class="sa-toolbar">
+
+                    <input
+                        id="saSearch"
+                        type="search"
+                        placeholder="Search staff, Discord ID or role..."
+                        value="${esc(saSearch)}"
+                    >
+
+                    <select id="saRoleFilter">
+
+                        <option value="All">All Roles</option>
+
+                        ${roles.map(role => `
+                            <option value="${esc(role)}">
+                                ${esc(role)}
+                            </option>
+                        `).join('')}
+
+                    </select>
+
+                    <button
+                        type="button"
+                        class="primary"
+                        id="saOpenDirectory">
+                        Open Staff Directory
+                    </button>
+
+                </div>
+
+                <p class="muted">
+                    Showing ${visible.length} of ${members.length} staff members
+                </p>
+
+                <div class="sa-grid">
+
+                    ${visible.map(member => {
+
+                        const discordId = saDiscordId(member);
+                        const knownRole =
+                            Object.prototype.hasOwnProperty.call(
+                                SA_PERMISSIONS,
+                                member.role
+                            );
+
+                        const permissions =
+                            SA_PERMISSIONS[member.role] || [];
+
+                        return `
+                            <div class="sa-card">
+
+                                <h3>${esc(member.name)}</h3>
+
+                                <div class="sa-meta">
+                                    ${esc(member.role || 'No Role')}
+                                </div>
+
+                                <div class="sa-tags">
+
+                                    <span class="sa-tag ${
+                                        member.status === 'Active'
+                                            ? 'good'
+                                            : 'warn'
+                                    }">
+                                        ${esc(saAccountStatus(member))}
+                                    </span>
+
+                                    <span class="sa-tag ${
+                                        discordId ? 'good' : 'warn'
+                                    }">
+                                        ${
+                                            discordId
+                                                ? 'Discord ID Recorded'
+                                                : 'Discord ID Missing'
+                                        }
+                                    </span>
+
+                                    ${!knownRole ? `
+                                        <span class="sa-tag warn">
+                                            Role Not Mapped
+                                        </span>
+                                    ` : ''}
+
+                                </div>
+
+                                <div class="sa-meta">
+
+                                    <div>
+                                        Staff ID: ${esc(member.id)}
+                                    </div>
+
+                                    <div>
+                                        Discord: ${
+                                            esc(discordId || 'Not linked')
+                                        }
+                                    </div>
+
+                                    <div>
+                                        Open Cases: ${saCaseCount(member)}
+                                    </div>
+
+                                    <div>
+                                        Outstanding Tasks: ${saTaskCount(member)}
+                                    </div>
+
+                                    <div>
+                                        Planned Permissions:
+                                        ${permissions.length}
+                                    </div>
+
+                                </div>
+
+                                <div class="sa-actions">
+
+                                    <button
+                                        type="button"
+                                        class="primary"
+                                        data-sa-profile="${esc(member.id)}">
+                                        View Profile
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        class="secondary"
+                                        data-sa-edit="${esc(member.id)}">
+                                        Edit Staff
+                                    </button>
+
+                                </div>
+
+                            </div>
+                        `;
+
+                    }).join('') || `
+                        <div class="sa-panel">
+                            No staff members match your search.
+                        </div>
+                    `}
+
+                </div>
+
+            </div>
+
+            ${saRenderPermissions()}
+
+        </div>
+    `;
+
+    document.getElementById('saOpenDirectory').onclick = () => {
+        page = 'staff';
+        render();
+    };
+
+    const search = document.getElementById('saSearch');
+
+    search.oninput = () => {
+        saSearch = search.value;
+        const position = search.selectionStart;
+
+        renderStaffAdministration();
+
+        const next = document.getElementById('saSearch');
+        next.focus();
+        next.setSelectionRange(position, position);
+    };
+
+    const roleFilter = document.getElementById('saRoleFilter');
+
+    roleFilter.value = saRoleFilter;
+
+    roleFilter.onchange = () => {
+        saRoleFilter = roleFilter.value;
+        renderStaffAdministration();
+    };
+
+    document.querySelectorAll('[data-sa-profile]')
+        .forEach(button => {
+
+            button.onclick = () => {
+                saOpenStaff(button.dataset.saProfile);
+            };
+
+        });
+
+    document.querySelectorAll('[data-sa-edit]')
+        .forEach(button => {
+
+            button.onclick = () => {
+                saEditStaff(button.dataset.saEdit);
+            };
+
+        });
+}
+
+// =====================================================
+// STAFF ADMINISTRATION PAGE ROUTER
+// =====================================================
+
+const renderBeforeStaffAdministration = render;
+
+render = function () {
+
+    if (page === 'staffadmin') {
+
+        nav();
+
+        document.getElementById('title').textContent =
+            'Staff Administration';
+
+        document.getElementById('crumb').textContent =
+            'Staff Administration';
+
+        document.getElementById('subtitle').textContent =
+            'Staff oversight and Discord access preparation';
+
+        document.getElementById('add').style.display = 'none';
+
+        renderStaffAdministration();
+
+        if (typeof renderNotificationCentre === 'function') {
+            renderNotificationCentre();
+        }
+
+        return;
+    }
+
+    renderBeforeStaffAdministration();
 };
    
 // Render the workspace.
