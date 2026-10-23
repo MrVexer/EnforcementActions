@@ -2857,6 +2857,130 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
+
+   /* ==========================================
+   DISCORD ROLE CONFIGURATION MANAGER
+========================================== */
+
+.drc-panel {
+    background: #211e22;
+    border: 1px solid #49343e;
+    border-radius: 12px;
+    padding: 22px;
+}
+
+.drc-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+}
+
+.drc-heading h2 {
+    margin: 0 0 6px;
+    font-size: 19px;
+}
+
+.drc-muted {
+    color: #aaa0a8;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.drc-settings {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.drc-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.drc-field label {
+    font-size: 12px;
+    color: #c0b2ba;
+}
+
+.drc-field input {
+    width: 100%;
+    min-width: 0;
+}
+
+.drc-table {
+    width: 100%;
+    min-width: 760px;
+}
+
+.drc-table input[type="text"] {
+    width: 100%;
+    min-width: 180px;
+}
+
+.drc-table input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #d32b3e;
+    cursor: pointer;
+}
+
+.drc-role {
+    font-weight: 650;
+    color: #f5edf0;
+}
+
+.drc-status {
+    display: inline-block;
+    border-radius: 6px;
+    padding: 5px 9px;
+    font-size: 11px;
+}
+
+.drc-status.ready {
+    color: #9ce6b7;
+    background: #203b30;
+}
+
+.drc-status.missing {
+    color: #f0c989;
+    background: #493820;
+}
+
+.drc-status.disabled {
+    color: #aaa1a8;
+    background: #353036;
+}
+
+.drc-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 18px;
+}
+
+.drc-notice {
+    margin-top: 16px;
+    padding: 14px;
+    background: #302720;
+    border: 1px solid #66503b;
+    border-radius: 8px;
+    color: #e7caa3;
+    font-size: 12px;
+    line-height: 1.7;
+}
+
+@media (max-width: 650px) {
+    .drc-settings {
+        grid-template-columns: 1fr;
+    }
+}
    
   </style>
  </head>
@@ -9239,6 +9363,486 @@ render = function () {
     }
 
     renderBeforeStaffAdministration();
+};
+
+   // =====================================================
+// VENGEFUL REALMS — DISCORD ROLE CONFIGURATION
+// =====================================================
+
+// Uses the existing SA_PERMISSIONS role definitions.
+// Configuration is stored locally until a secure backend
+// and Discord authentication are implemented.
+
+const DRC_ROLES = Object.keys(SA_PERMISSIONS);
+
+function drcDefaultConfig() {
+
+    return {
+        guildId: '',
+        roles: Object.fromEntries(
+            DRC_ROLES.map(role => [
+                role,
+                {
+                    roleId: '',
+                    enabled: true
+                }
+            ])
+        )
+    };
+}
+
+// Initialise without replacing existing saved data.
+
+if (
+    !data.discordRoleConfig ||
+    typeof data.discordRoleConfig !== 'object' ||
+    Array.isArray(data.discordRoleConfig)
+) {
+    data.discordRoleConfig = drcDefaultConfig();
+    save();
+}
+
+function drcConfig() {
+
+    const config = data.discordRoleConfig;
+
+    if (
+        !config.roles ||
+        typeof config.roles !== 'object' ||
+        Array.isArray(config.roles)
+    ) {
+        config.roles = {};
+    }
+
+    DRC_ROLES.forEach(role => {
+
+        if (
+            !config.roles[role] ||
+            typeof config.roles[role] !== 'object'
+        ) {
+            config.roles[role] = {
+                roleId: '',
+                enabled: true
+            };
+        }
+
+    });
+
+    return config;
+}
+
+function drcValidId(value) {
+
+    return /^\d{17,20}$/.test(
+        String(value || '').trim()
+    );
+}
+
+function drcRoleStatus(entry) {
+
+    if (!entry.enabled) {
+        return {
+            text: 'Disabled',
+            className: 'disabled'
+        };
+    }
+
+    if (drcValidId(entry.roleId)) {
+        return {
+            text: 'Configured',
+            className: 'ready'
+        };
+    }
+
+    return {
+        text: 'Not Configured',
+        className: 'missing'
+    };
+}
+
+function drcRenderManager() {
+
+    const config = drcConfig();
+
+    const configured = DRC_ROLES.filter(role => {
+
+        const entry = config.roles[role];
+
+        return entry.enabled &&
+            drcValidId(entry.roleId);
+
+    }).length;
+
+    const rows = DRC_ROLES.map((role, index) => {
+
+        const entry = config.roles[role];
+
+        const status = drcRoleStatus(entry);
+
+        return `
+            <tr data-drc-row="${index}">
+
+                <td class="drc-role">
+                    ${esc(role)}
+                </td>
+
+                <td>
+                    <input
+                        type="text"
+                        inputmode="numeric"
+                        maxlength="20"
+                        autocomplete="off"
+                        spellcheck="false"
+                        data-drc-id="${index}"
+                        value="${esc(entry.roleId || '')}"
+                        placeholder="Discord Role ID"
+                        aria-label="${esc(role)} Discord Role ID"
+                    >
+                </td>
+
+                <td>
+                    <input
+                        type="checkbox"
+                        data-drc-enabled="${index}"
+                        ${entry.enabled ? 'checked' : ''}
+                        aria-label="Enable ${esc(role)} mapping"
+                    >
+                </td>
+
+                <td>
+                    <span
+                        class="drc-status ${status.className}"
+                        data-drc-status="${index}">
+                        ${status.text}
+                    </span>
+                </td>
+
+            </tr>
+        `;
+
+    }).join('');
+
+    return `
+        <section class="drc-panel">
+
+            <div class="drc-heading">
+
+                <div>
+                    <h2>Discord Role Configuration</h2>
+
+                    <div class="drc-muted">
+                        Map Discord server roles to website
+                        permission levels.
+                    </div>
+                </div>
+
+                <span class="sa-tag">
+                    ${configured} / ${DRC_ROLES.length} Configured
+                </span>
+
+            </div>
+
+            <div class="drc-settings">
+
+                <div class="drc-field">
+
+                    <label for="drcGuildId">
+                        Discord Server ID
+                    </label>
+
+                    <input
+                        id="drcGuildId"
+                        type="text"
+                        inputmode="numeric"
+                        maxlength="20"
+                        autocomplete="off"
+                        spellcheck="false"
+                        placeholder="Enter Discord Server ID"
+                        value="${esc(config.guildId || '')}"
+                    >
+
+                </div>
+
+                <button
+                    type="button"
+                    class="secondary"
+                    id="drcHelp">
+                    How to Find IDs
+                </button>
+
+            </div>
+
+            <div class="tablewrap">
+
+                <table class="drc-table">
+
+                    <thead>
+                        <tr>
+                            <th>Website Role</th>
+                            <th>Discord Role ID</th>
+                            <th>Enabled</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        ${rows}
+                    </tbody>
+
+                </table>
+
+            </div>
+
+            <div class="drc-footer">
+
+                <button
+                    type="button"
+                    class="secondary"
+                    id="drcDiscard">
+                    Discard Changes
+                </button>
+
+                <button
+                    type="button"
+                    class="primary"
+                    id="drcSave">
+                    Save Configuration
+                </button>
+
+            </div>
+
+            <div class="drc-notice">
+
+                <strong>Integration Status: Not Connected</strong>
+
+                <p>
+                    Role IDs are stored as configuration only.
+                    Discord membership is not checked and these
+                    settings do not currently restrict website access.
+                </p>
+
+                <p>
+                    Once authentication is implemented, the secure
+                    backend will verify Discord membership and roles
+                    before granting access to protected resources.
+                </p>
+
+            </div>
+
+        </section>
+    `;
+}
+
+function drcBindManager() {
+
+    const saveButton = document.getElementById('drcSave');
+
+    if (!saveButton) return;
+
+    const guildInput = document.getElementById('drcGuildId');
+
+    function updatePreview(index) {
+
+        const roleIdInput = document.querySelector(
+            `[data-drc-id="${index}"]`
+        );
+
+        const enabledInput = document.querySelector(
+            `[data-drc-enabled="${index}"]`
+        );
+
+        const statusElement = document.querySelector(
+            `[data-drc-status="${index}"]`
+        );
+
+        if (
+            !roleIdInput ||
+            !enabledInput ||
+            !statusElement
+        ) return;
+
+        const status = drcRoleStatus({
+            roleId: roleIdInput.value.trim(),
+            enabled: enabledInput.checked
+        });
+
+        statusElement.className =
+            `drc-status ${status.className}`;
+
+        statusElement.textContent = status.text;
+    }
+
+    DRC_ROLES.forEach((role, index) => {
+
+        const idInput = document.querySelector(
+            `[data-drc-id="${index}"]`
+        );
+
+        const enabledInput = document.querySelector(
+            `[data-drc-enabled="${index}"]`
+        );
+
+        if (!idInput || !enabledInput) return;
+
+        idInput.addEventListener('input', () => {
+            updatePreview(index);
+        });
+
+        enabledInput.addEventListener('change', () => {
+            updatePreview(index);
+        });
+
+    });
+
+    document.getElementById('drcHelp').onclick = () => {
+
+        alert(
+            'HOW TO FIND DISCORD IDS\n\n' +
+            '1. Open Discord Settings.\n' +
+            '2. Go to Advanced.\n' +
+            '3. Enable Developer Mode.\n\n' +
+            'SERVER ID:\n' +
+            'Right-click your Discord server icon ' +
+            'and select Copy Server ID.\n\n' +
+            'ROLE ID:\n' +
+            'Open Server Settings > Roles. ' +
+            'Right-click the role and select Copy Role ID.'
+        );
+
+    };
+
+    document.getElementById('drcDiscard').onclick = () => {
+
+        if (!confirm(
+            'Discard unsaved Discord role configuration changes?'
+        )) return;
+
+        renderStaffAdministration();
+
+    };
+
+    saveButton.onclick = () => {
+
+        const guildId = guildInput.value.trim();
+
+        if (guildId && !drcValidId(guildId)) {
+
+            alert(
+                'Discord Server ID must contain ' +
+                '17 to 20 digits.'
+            );
+
+            guildInput.focus();
+            return;
+        }
+
+        const nextRoles = {};
+
+        const usedIds = new Set();
+
+        for (let index = 0; index < DRC_ROLES.length; index++) {
+
+            const role = DRC_ROLES[index];
+
+            const roleIdInput = document.querySelector(
+                `[data-drc-id="${index}"]`
+            );
+
+            const enabledInput = document.querySelector(
+                `[data-drc-enabled="${index}"]`
+            );
+
+            const roleId = roleIdInput.value.trim();
+
+            const enabled = enabledInput.checked;
+
+            if (roleId && !drcValidId(roleId)) {
+
+                alert(
+                    `Invalid Discord Role ID for ${role}.\n` +
+                    'IDs must contain 17 to 20 digits.'
+                );
+
+                roleIdInput.focus();
+                return;
+            }
+
+            if (roleId && usedIds.has(roleId)) {
+
+                alert(
+                    `Duplicate Discord Role ID detected.\n\n` +
+                    `The same Discord role cannot be mapped ` +
+                    `to multiple website roles.`
+                );
+
+                roleIdInput.focus();
+                return;
+            }
+
+            if (roleId) {
+                usedIds.add(roleId);
+            }
+
+            nextRoles[role] = {
+                roleId,
+                enabled
+            };
+        }
+
+        const previous = structuredClone(drcConfig());
+
+        const next = {
+            guildId,
+            roles: nextRoles
+        };
+
+        data.discordRoleConfig = next;
+
+        save();
+
+        if (typeof logAudit === 'function') {
+
+            logAudit(
+                'Discord role configuration updated',
+                'staffadmin',
+                'DISCORD-ROLES',
+                previous,
+                next,
+                'Local Discord role mapping configuration updated'
+            );
+
+        }
+
+        renderStaffAdministration();
+
+        alert('Discord role configuration saved locally.');
+
+    };
+}
+
+// =====================================================
+// EXTEND EXISTING STAFF ADMINISTRATION PAGE
+// =====================================================
+
+// Keep the original page intact and append the manager.
+
+const renderStaffAdminBeforeDiscordRoles =
+    renderStaffAdministration;
+
+renderStaffAdministration = function () {
+
+    renderStaffAdminBeforeDiscordRoles();
+
+    const pageContainer = document.querySelector('.sa-page');
+
+    if (!pageContainer) return;
+
+    pageContainer.insertAdjacentHTML(
+        'beforeend',
+        drcRenderManager()
+    );
+
+    drcBindManager();
 };
    
 // Render the workspace.
