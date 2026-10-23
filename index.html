@@ -2369,6 +2369,97 @@
     color: #a99fa7;
     padding: 18px 0;
 }
+
+   /* ADVANCED PLAYER SEARCH */
+
+.aps-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.aps-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.aps-toolbar input {
+    flex: 1;
+    min-width: 240px;
+}
+
+.aps-toolbar select {
+    min-width: 150px;
+}
+
+.aps-summary {
+    color: #aaa0a8;
+    font-size: 12px;
+}
+
+.aps-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 13px;
+}
+
+.aps-card {
+    padding: 19px;
+    border: 1px solid #49353f;
+    border-radius: 11px;
+    background: #242025;
+}
+
+.aps-card h3 {
+    margin: 0 0 7px;
+    color: #fff;
+    font-size: 16px;
+}
+
+.aps-card p {
+    margin: 6px 0;
+    color: #b9adb5;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.aps-counts {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin: 16px 0;
+}
+
+.aps-count {
+    padding: 11px 6px;
+    background: #30272e;
+    border-radius: 7px;
+    text-align: center;
+}
+
+.aps-count strong {
+    display: block;
+    font-size: 21px;
+    color: #fff;
+}
+
+.aps-count span {
+    font-size: 10px;
+    color: #aaa0a8;
+}
+
+.aps-card .primary {
+    width: 100%;
+}
+
+.aps-empty {
+    padding: 35px;
+    text-align: center;
+    border: 1px dashed #49353f;
+    border-radius: 10px;
+    color: #aaa0a8;
+}
    
   </style>
  </head>
@@ -2496,6 +2587,11 @@ KEYS.push('staff');
 
 LABEL.staff = 'Staff Directory';
 ICON.staff = '♙';
+   // Register Advanced Player Search
+KEYS.push('playersearch');
+
+LABEL.playersearch = 'Advanced Player Search';
+ICON.playersearch = '⌕';
    let page='overview',filter='',statusFilter='All',viewMode='table';const storeKey='vr_workspace_demo_v1';const demo={players:[{id:'P-001',name:'ExamplePlayer',discord:'000000000000000001',characters:'Vekor, Torin',notes:'Demo player profile'},{id:'P-002',name:'NordicExample',discord:'000000000000000002',characters:'Haldor',notes:'Demo player profile'}],infractions:[{id:'INF-001',player:'P-001',type:'Metagaming',severity:'Moderate',date:'2026-10-18',officer:'Example Officer',status:'Resolved',description:'Illustrative incident only',evidence:''},{id:'INF-002',player:'P-002',type:'FailRP',severity:'Low',date:'2026-10-17',officer:'Example Officer',status:'Open',description:'Illustrative incident only',evidence:''}],punishments:[{id:'PUN-001',player:'P-001',infraction:'INF-001',action:'Warning',duration:'N/A',status:'Active',officer:'Example Officer',date:'2026-10-18',notes:'Demo punishment'}],appeals:[{id:'APP-001',punishment:'PUN-001',player:'P-001',status:'Pending',reviewer:'',reason:'Illustrative appeal request',decision:''}],activity:[]};let data;try{data=JSON.parse(localStorage.getItem(storeKey))||structuredClone(demo)}catch{data=structuredClone(demo)};
     
     function save(){localStorage.setItem(storeKey,JSON.stringify(data))}
@@ -6808,6 +6904,303 @@ render = function () {
 
     renderBeforeStaffDirectory();
 };
+
+   // =====================================================
+// VENGEFUL REALMS — ADVANCED PLAYER SEARCH
+// =====================================================
+
+let apsQuery = '';
+let apsFilter = 'all';
+
+function getAdvancedPlayerResults() {
+
+    const query = apsQuery.trim().toLowerCase();
+
+    return (data.players || []).map(member => {
+
+        const infractions = (data.infractions || [])
+            .filter(item => item.player === member.id);
+
+        const punishments = (data.punishments || [])
+            .filter(item => item.player === member.id);
+
+        const appeals = (data.appeals || [])
+            .filter(item => item.player === member.id);
+
+        const records = [
+            ...infractions,
+            ...punishments,
+            ...appeals
+        ];
+
+        const playerText = [
+            member.id,
+            member.name,
+            member.discord,
+            member.steam,
+            member.steamId,
+            member.characters,
+            member.notes
+        ].join(' ').toLowerCase();
+
+        const historyText = records
+            .map(item => Object.values(item).join(' '))
+            .join(' ')
+            .toLowerCase();
+
+        const matchesSearch =
+            !query ||
+            playerText.includes(query) ||
+            historyText.includes(query);
+
+        const matchesFilter =
+            apsFilter === 'all' ||
+            (apsFilter === 'infractions' && infractions.length > 0) ||
+            (apsFilter === 'punishments' && punishments.length > 0) ||
+            (apsFilter === 'appeals' && appeals.length > 0) ||
+            (apsFilter === 'clean' &&
+                infractions.length === 0 &&
+                punishments.length === 0);
+
+        return {
+            member,
+            infractions,
+            punishments,
+            appeals,
+            matches: matchesSearch && matchesFilter
+        };
+
+    }).filter(result => result.matches);
+}
+
+function renderAdvancedPlayerSearchResults() {
+
+    const results = getAdvancedPlayerResults();
+
+    const summary = document.getElementById('apsSummary');
+    const grid = document.getElementById('apsResults');
+
+    if (!summary || !grid) return;
+
+    summary.textContent =
+        `${results.length} of ${(data.players || []).length} players found`;
+
+    if (!results.length) {
+
+        grid.innerHTML = `
+            <div class="aps-empty">
+                No players match your search or filters.
+            </div>
+        `;
+
+        return;
+    }
+
+    grid.innerHTML = results.map(result => {
+
+        const member = result.member;
+
+        return `
+            <div class="aps-card">
+
+                <h3>${esc(member.name || 'Unnamed Player')}</h3>
+
+                <p>
+                    <strong>Player ID:</strong>
+                    ${esc(member.id)}
+                </p>
+
+                <p>
+                    <strong>Discord ID:</strong>
+                    ${esc(member.discord || 'Not recorded')}
+                </p>
+
+                <p>
+                    <strong>Characters:</strong>
+                    ${esc(member.characters || 'None recorded')}
+                </p>
+
+                <div class="aps-counts">
+
+                    <div class="aps-count">
+                        <strong>${result.infractions.length}</strong>
+                        <span>Infractions</span>
+                    </div>
+
+                    <div class="aps-count">
+                        <strong>${result.punishments.length}</strong>
+                        <span>Punishments</span>
+                    </div>
+
+                    <div class="aps-count">
+                        <strong>${result.appeals.length}</strong>
+                        <span>Appeals</span>
+                    </div>
+
+                </div>
+
+                <button
+                    type="button"
+                    class="primary"
+                    data-aps-player="${esc(member.id)}"
+                >
+                    View Player Profile →
+                </button>
+
+            </div>
+        `;
+
+    }).join('');
+
+    grid.querySelectorAll('[data-aps-player]')
+        .forEach(button => {
+
+            button.onclick = () => {
+
+                const playerId = button.dataset.apsPlayer;
+
+                page = 'players';
+                render();
+                openRecord(playerId);
+
+            };
+
+        });
+}
+
+function renderAdvancedPlayerSearch() {
+
+    document.getElementById('content').innerHTML = `
+        <div class="aps-panel">
+
+            <div>
+                <h2>Advanced Player Search</h2>
+                <p class="muted">
+                    Search player identities, characters and linked
+                    enforcement records.
+                </p>
+            </div>
+
+            <div class="aps-toolbar">
+
+                <input
+                    id="apsInput"
+                    type="search"
+                    placeholder="Search name, Discord ID, character, case ID..."
+                    value="${esc(apsQuery)}"
+                >
+
+                <select id="apsFilter">
+
+                    <option value="all">All Players</option>
+
+                    <option value="infractions">
+                        Has Infractions
+                    </option>
+
+                    <option value="punishments">
+                        Has Punishments
+                    </option>
+
+                    <option value="appeals">
+                        Has Appeals
+                    </option>
+
+                    <option value="clean">
+                        No Infractions or Punishments
+                    </option>
+
+                </select>
+
+                <button
+                    type="button"
+                    class="secondary"
+                    id="apsClear"
+                >
+                    Clear
+                </button>
+
+            </div>
+
+            <div class="aps-summary" id="apsSummary"></div>
+
+            <div class="aps-grid" id="apsResults"></div>
+
+        </div>
+    `;
+
+    const input = document.getElementById('apsInput');
+    const filterSelect = document.getElementById('apsFilter');
+
+    filterSelect.value = apsFilter;
+
+    input.oninput = () => {
+
+        apsQuery = input.value;
+
+        renderAdvancedPlayerSearchResults();
+
+    };
+
+    filterSelect.onchange = () => {
+
+        apsFilter = filterSelect.value;
+
+        renderAdvancedPlayerSearchResults();
+
+    };
+
+    document.getElementById('apsClear').onclick = () => {
+
+        apsQuery = '';
+        apsFilter = 'all';
+
+        input.value = '';
+        filterSelect.value = 'all';
+
+        renderAdvancedPlayerSearchResults();
+        input.focus();
+
+    };
+
+    renderAdvancedPlayerSearchResults();
+}
+
+// -----------------------------------------------------
+// CONNECT ADVANCED SEARCH TO THE WORKSPACE
+// -----------------------------------------------------
+
+const renderBeforeAdvancedSearch = render;
+
+render = function () {
+
+    if (page === 'playersearch') {
+
+        nav();
+
+        document.getElementById('title').textContent =
+            'Advanced Player Search';
+
+        document.getElementById('crumb').textContent =
+            'Player Search';
+
+        document.getElementById('subtitle').textContent =
+            'Search the complete enforcement player database';
+
+        document.getElementById('add').style.display = 'none';
+
+        renderAdvancedPlayerSearch();
+
+        if (typeof renderNotificationCentre === 'function') {
+            renderNotificationCentre();
+        }
+
+        return;
+    }
+
+    renderBeforeAdvancedSearch();
+};
+   
 // Render the workspace.
 render();
 
