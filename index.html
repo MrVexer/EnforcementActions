@@ -8097,15 +8097,14 @@ const DOC_CATEGORIES = [
     'Other'
 ];
 
-function validGoogleDocUrl(value) {
+function validResourceUrl(value) {
     try {
         const url = new URL(value);
 
-        return url.protocol === 'https:' &&
-            (
-                url.hostname === 'docs.google.com' ||
-                url.hostname === 'drive.google.com'
-            );
+        return (
+            (url.protocol === 'https:' || url.protocol === 'http:') &&
+            Boolean(url.hostname)
+        );
     } catch {
         return false;
     }
@@ -8145,13 +8144,13 @@ function openDocsEditor(docId = null) {
             </div>
 
             <div class="field">
-                <label>Google Docs Link</label>
+                <label>Resource URL</label>
                 <input
                     name="url"
                     type="url"
                     required
                     value="${esc(doc.url)}"
-                    placeholder="https://docs.google.com/document/d/..."
+                    placeholder="https://example.com/your-resource"
                 >
             </div>
 
@@ -8229,12 +8228,12 @@ function openDocsEditor(docId = null) {
             author: fields.namedItem('author').value
         };
 
-        if (!validGoogleDocUrl(values.url)) {
-            alert(
-                'Please enter a valid HTTPS Google Docs or Google Drive link.'
-            );
-            return;
-        }
+        if (!validResourceUrl(values.url)) {
+    alert(
+        'Please enter a valid website link beginning with https:// or http://'
+    );
+    return;
+}
 
         if (!(data.staff || []).some(
             member => member.id === values.author
@@ -8366,7 +8365,7 @@ function renderDocsLibrary() {
                 <div>
                     <h2>Staff Document Library</h2>
                     <p class="muted">
-                        Store and organise Google Docs links for staff reference.
+                        A central library for staff documents, guides, resources and useful links.
                     </p>
                 </div>
 
