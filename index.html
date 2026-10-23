@@ -2981,6 +2981,165 @@
         grid-template-columns: 1fr;
     }
 }
+
+   /* ==========================================
+   DISCORD ROLE HIERARCHY MANAGER
+========================================== */
+
+.drh-panel {
+    padding: 22px;
+    background: #211e22;
+    border: 1px solid #49343e;
+    border-radius: 12px;
+}
+
+.drh-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+}
+
+.drh-header h2 {
+    margin: 0 0 7px;
+    font-size: 19px;
+}
+
+.drh-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.drh-row {
+    display: grid;
+    grid-template-columns: 46px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 14px;
+    padding: 14px;
+    border: 1px solid #46353d;
+    border-radius: 9px;
+    background: #292329;
+}
+
+.drh-rank {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 9px;
+    background: #502632;
+    color: #ffb8c5;
+    font-weight: 800;
+}
+
+.drh-role {
+    min-width: 0;
+}
+
+.drh-role strong {
+    display: block;
+    color: #fff;
+    font-size: 13px;
+}
+
+.drh-role small {
+    display: block;
+    margin-top: 5px;
+    color: #aaa0a8;
+    overflow-wrap: anywhere;
+}
+
+.drh-controls {
+    display: flex;
+    gap: 6px;
+}
+
+.drh-controls button {
+    width: 35px;
+    height: 35px;
+    padding: 0;
+    border: 1px solid #62414c;
+    border-radius: 7px;
+    background: #392730;
+    color: #f6dce2;
+}
+
+.drh-controls button:hover:not(:disabled) {
+    background: #653040;
+}
+
+.drh-controls button:disabled {
+    opacity: .3;
+    cursor: not-allowed;
+}
+
+.drh-preview {
+    margin-top: 20px;
+    padding: 18px;
+    border: 1px solid #49343e;
+    border-radius: 10px;
+    background: #292329;
+}
+
+.drh-preview h3 {
+    margin: 0 0 12px;
+    font-size: 15px;
+}
+
+.drh-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.drh-choice {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 10px;
+    border: 1px solid #49343e;
+    border-radius: 7px;
+    background: #211e22;
+    font-size: 12px;
+}
+
+.drh-choice input {
+    accent-color: #d32b3e;
+}
+
+.drh-result {
+    margin-top: 14px;
+    padding: 15px;
+    border: 1px solid #5c3844;
+    border-radius: 9px;
+    background: #34242c;
+    line-height: 1.7;
+}
+
+.drh-result strong {
+    color: #f3a0af;
+}
+
+.drh-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 18px;
+}
+
+@media (max-width: 650px) {
+    .drh-preview-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .drh-row {
+        gap: 9px;
+        padding: 10px;
+    }
+}
    
   </style>
  </head>
@@ -9792,9 +9951,10 @@ function drcBindManager() {
         const previous = structuredClone(drcConfig());
 
         const next = {
-            guildId,
-            roles: nextRoles
-        };
+    guildId,
+    roles: nextRoles,
+    hierarchy: drhSavedOrder()
+};
 
         data.discordRoleConfig = next;
 
@@ -9843,6 +10003,461 @@ renderStaffAdministration = function () {
     );
 
     drcBindManager();
+};
+
+   // =====================================================
+// VENGEFUL REALMS — DISCORD ROLE HIERARCHY
+// =====================================================
+
+// Highest-priority role wins.
+// This is a local configuration and permission preview.
+// It does not authenticate users or enforce access.
+
+const DRH_DEFAULT_ORDER = [
+    'Operations Manager',
+    'Head of Enforcement',
+    'Enforcement Captain',
+    'Enforcement Officer',
+    'Trial Enforcement',
+    'Support Team',
+    'Story Team'
+];
+
+let drhDraftOrder = null;
+let drhPreviewRoles = [];
+
+function drhSavedOrder() {
+
+    const config = drcConfig();
+
+    const saved = Array.isArray(config.hierarchy)
+        ? config.hierarchy
+        : [];
+
+    const available = Object.keys(SA_PERMISSIONS);
+
+    // Keep only valid roles, with no duplicates.
+    const order = [...new Set(saved)].filter(role =>
+        available.includes(role)
+    );
+
+    // Include any roles introduced after configuration.
+    DRH_DEFAULT_ORDER.forEach(role => {
+        if (available.includes(role) && !order.includes(role)) {
+            order.push(role);
+        }
+    });
+
+    available.forEach(role => {
+        if (!order.includes(role)) {
+            order.push(role);
+        }
+    });
+
+    return order;
+}
+
+function drhCurrentOrder() {
+
+    if (!drhDraftOrder) {
+        drhDraftOrder = drhSavedOrder();
+    }
+
+    return drhDraftOrder;
+}
+
+function drhMoveRole(index, direction) {
+
+    const order = drhCurrentOrder();
+
+    const target = index + direction;
+
+    if (target < 0 || target >= order.length) {
+        return;
+    }
+
+    [order[index], order[target]] =
+        [order[target], order[index]];
+
+    drhRefresh();
+}
+
+function drhConfiguredRole(role) {
+
+    const entry = drcConfig().roles[role];
+
+    return Boolean(
+        entry &&
+        entry.enabled &&
+        drcValidId(entry.roleId)
+    );
+}
+
+function drhResolveRole(selectedRoles, order) {
+
+    // Ignore duplicate or unknown roles.
+    const selected = new Set(
+        selectedRoles.filter(role =>
+            Object.prototype.hasOwnProperty.call(
+                SA_PERMISSIONS,
+                role
+            )
+        )
+    );
+
+    // Only configured and enabled mappings qualify.
+    return order.find(role =>
+        selected.has(role) &&
+        drhConfiguredRole(role)
+    ) || null;
+}
+
+function drhRenderManager() {
+
+    const order = drhCurrentOrder();
+
+    return `
+        <section class="drh-panel">
+
+            <div class="drh-header">
+
+                <div>
+                    <h2>Discord Role Hierarchy</h2>
+
+                    <p class="drc-muted">
+                        Set the priority of Discord roles.
+                        The highest qualifying role determines
+                        the website permission level.
+                    </p>
+                </div>
+
+                <span class="sa-tag">
+                    Highest Priority Wins
+                </span>
+
+            </div>
+
+            <div class="drh-list">
+
+                ${order.map((role, index) => `
+
+                    <div class="drh-row">
+
+                        <div class="drh-rank">
+                            ${index + 1}
+                        </div>
+
+                        <div class="drh-role">
+
+                            <strong>${esc(role)}</strong>
+
+                            <small>
+                                ${
+                                    drhConfiguredRole(role)
+                                        ? 'Discord role configured'
+                                        : 'Discord role not configured or disabled'
+                                }
+                            </small>
+
+                        </div>
+
+                        <div class="drh-controls">
+
+                            <button
+                                type="button"
+                                data-drh-up="${index}"
+                                ${index === 0 ? 'disabled' : ''}
+                                title="Increase priority">
+                                ↑
+                            </button>
+
+                            <button
+                                type="button"
+                                data-drh-down="${index}"
+                                ${
+                                    index === order.length - 1
+                                        ? 'disabled'
+                                        : ''
+                                }
+                                title="Decrease priority">
+                                ↓
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                `).join('')}
+
+            </div>
+
+            <div class="drh-footer">
+
+                <button
+                    type="button"
+                    class="secondary"
+                    id="drhReset">
+                    Reset Draft
+                </button>
+
+                <button
+                    type="button"
+                    class="primary"
+                    id="drhSave">
+                    Save Hierarchy
+                </button>
+
+            </div>
+
+            <div class="drh-preview">
+
+                <h3>Permission Resolution Preview</h3>
+
+                <p class="drc-muted">
+                    Select multiple Discord roles to simulate
+                    which permission level would win.
+                    Only enabled, configured role mappings qualify.
+                </p>
+
+                <div class="drh-preview-grid">
+
+                    ${order.map((role, index) => `
+
+                        <label class="drh-choice">
+
+                            <input
+                                type="checkbox"
+                                data-drh-preview="${index}"
+                                ${
+                                    drhPreviewRoles.includes(role)
+                                        ? 'checked'
+                                        : ''
+                                }
+                            >
+
+                            ${esc(role)}
+
+                        </label>
+
+                    `).join('')}
+
+                </div>
+
+                <div class="drh-result" id="drhResult">
+                </div>
+
+            </div>
+
+            <div class="drc-notice">
+
+                <strong>Authentication not connected</strong>
+
+                <p>
+                    This hierarchy is a local preview only.
+                    The future backend must verify Discord
+                    membership, role IDs and the saved hierarchy
+                    before authorising protected actions.
+                </p>
+
+            </div>
+
+        </section>
+    `;
+}
+
+function drhUpdatePreview() {
+
+    const result = document.getElementById('drhResult');
+
+    if (!result) return;
+
+    const winner = drhResolveRole(
+        drhPreviewRoles,
+        drhCurrentOrder()
+    );
+
+    if (!winner) {
+
+        result.innerHTML = `
+            <strong>No qualifying role</strong>
+
+            <div class="drc-muted">
+                Select a role with an enabled and configured
+                Discord Role ID to preview its permissions.
+                Otherwise, the future system would deny access.
+            </div>
+        `;
+
+        return;
+    }
+
+    const permissions = SA_PERMISSIONS[winner] || [];
+
+    result.innerHTML = `
+        <strong>Effective Role: ${esc(winner)}</strong>
+
+        <div class="drc-muted">
+            Priority:
+            ${drhCurrentOrder().indexOf(winner) + 1}
+        </div>
+
+        <div class="sa-tags">
+
+            ${permissions.map(permission => {
+
+                const feature = SA_FEATURES.find(item =>
+                    item[0] === permission
+                );
+
+                const label = feature
+                    ? feature[1]
+                    : permission;
+
+                return `
+                    <span class="sa-tag good">
+                        ${esc(label)}
+                    </span>
+                `;
+
+            }).join('')}
+
+        </div>
+    `;
+}
+
+function drhBindManager() {
+
+    document.querySelectorAll('[data-drh-up]')
+        .forEach(button => {
+
+            button.onclick = () => {
+                drhMoveRole(
+                    Number(button.dataset.drhUp),
+                    -1
+                );
+            };
+
+        });
+
+    document.querySelectorAll('[data-drh-down]')
+        .forEach(button => {
+
+            button.onclick = () => {
+                drhMoveRole(
+                    Number(button.dataset.drhDown),
+                    1
+                );
+            };
+
+        });
+
+    document.querySelectorAll('[data-drh-preview]')
+        .forEach(input => {
+
+            input.onchange = () => {
+
+                const index = Number(
+                    input.dataset.drhPreview
+                );
+
+                const role = drhCurrentOrder()[index];
+
+                if (input.checked) {
+
+                    if (!drhPreviewRoles.includes(role)) {
+                        drhPreviewRoles.push(role);
+                    }
+
+                } else {
+
+                    drhPreviewRoles =
+                        drhPreviewRoles.filter(item =>
+                            item !== role
+                        );
+                }
+
+                drhUpdatePreview();
+            };
+
+        });
+
+    document.getElementById('drhReset').onclick = () => {
+
+        drhDraftOrder = drhSavedOrder();
+
+        drhRefresh();
+    };
+
+    document.getElementById('drhSave').onclick = () => {
+
+        const config = drcConfig();
+
+        const previous = [...drhSavedOrder()];
+
+        const next = [...drhCurrentOrder()];
+
+        config.hierarchy = next;
+
+        save();
+
+        if (typeof logAudit === 'function') {
+
+            logAudit(
+                'Discord role hierarchy updated',
+                'staffadmin',
+                'DISCORD-HIERARCHY',
+                previous,
+                next,
+                'Local role priority configuration updated'
+            );
+
+        }
+
+        drhDraftOrder = [...next];
+
+        renderStaffAdministration();
+
+        alert('Discord role hierarchy saved locally.');
+    };
+
+    drhUpdatePreview();
+}
+
+function drhRefresh() {
+
+    const existing = document.getElementById(
+        'drhManagerMount'
+    );
+
+    if (!existing) return;
+
+    existing.innerHTML = drhRenderManager();
+
+    drhBindManager();
+}
+
+// =====================================================
+// EXTEND STAFF ADMINISTRATION PAGE
+// =====================================================
+
+const renderStaffAdminBeforeHierarchy =
+    renderStaffAdministration;
+
+renderStaffAdministration = function () {
+
+    renderStaffAdminBeforeHierarchy();
+
+    const pageContainer = document.querySelector('.sa-page');
+
+    if (!pageContainer) return;
+
+    const mount = document.createElement('div');
+
+    mount.id = 'drhManagerMount';
+
+    pageContainer.appendChild(mount);
+
+    drhRefresh();
 };
    
 // Render the workspace.
