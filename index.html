@@ -2460,6 +2460,142 @@
     border-radius: 10px;
     color: #aaa0a8;
 }
+
+   /* ==========================================
+   STAFF TASK MANAGEMENT
+========================================== */
+
+.stm-board {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.stm-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.stm-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.stm-stat {
+    padding: 18px;
+    background: #242025;
+    border: 1px solid #49353f;
+    border-radius: 10px;
+}
+
+.stm-stat strong {
+    display: block;
+    font-size: 27px;
+    margin-bottom: 7px;
+}
+
+.stm-stat span {
+    color: #aaa0a8;
+    font-size: 12px;
+}
+
+.stm-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.stm-toolbar input {
+    flex: 1;
+    min-width: 200px;
+}
+
+.stm-columns {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(230px, 1fr));
+    gap: 14px;
+}
+
+.stm-column {
+    background: #1d1a1e;
+    border: 1px solid #403039;
+    border-radius: 11px;
+    padding: 14px;
+    min-width: 0;
+}
+
+.stm-column h3 {
+    font-size: 14px;
+    margin: 3px 0 16px;
+}
+
+.stm-card {
+    background: #292329;
+    border: 1px solid #49343e;
+    border-radius: 9px;
+    padding: 15px;
+    margin-bottom: 12px;
+}
+
+.stm-card h4 {
+    margin: 0 0 9px;
+    color: #fff;
+    font-size: 14px;
+}
+
+.stm-card p {
+    color: #bdb1b9;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.stm-meta {
+    color: #aaa0a8;
+    font-size: 11px;
+    line-height: 1.9;
+}
+
+.stm-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-top: 13px;
+}
+
+.stm-actions button {
+    font-size: 11px;
+    padding: 8px 10px;
+}
+
+.stm-overdue {
+    color: #ff8294;
+    font-weight: 700;
+}
+
+.stm-empty {
+    padding: 18px 6px;
+    color: #918790;
+    font-size: 12px;
+    text-align: center;
+}
+
+@media (max-width: 1050px) {
+    .stm-columns {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 650px) {
+    .stm-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
    
   </style>
  </head>
@@ -2587,6 +2723,13 @@ KEYS.push('staff');
 
 LABEL.staff = 'Staff Directory';
 ICON.staff = '♙';
+   // Register Staff Tasks
+if (!KEYS.includes('tasks')) {
+    KEYS.push('tasks');
+}
+
+LABEL.tasks = 'Staff Tasks';
+ICON.tasks = '☑';
    // Register Advanced Player Search
 KEYS.push('playersearch');
 
@@ -7284,6 +7427,545 @@ render = function () {
     }
 
     renderBeforeAdvancedSearch();
+};
+
+   // =====================================================
+// VENGEFUL REALMS — STAFF TASK MANAGEMENT
+// =====================================================
+
+// Initialise tasks for existing saved workspaces.
+if (!Array.isArray(data.tasks)) {
+    data.tasks = [];
+    save();
+}
+
+let taskSearch = '';
+let taskStaffFilter = 'All';
+
+const TASK_STATUSES = [
+    'To Do',
+    'In Progress',
+    'Completed'
+];
+
+const TASK_PRIORITIES = [
+    'Low',
+    'Medium',
+    'High',
+    'Critical'
+];
+
+function taskStaffName(id) {
+    return (data.staff || []).find(s => s.id === id)?.name
+        || 'Unassigned / Former Staff';
+}
+
+function taskIsOverdue(task) {
+    if (!task.dueDate || task.status === 'Completed') {
+        return false;
+    }
+
+    const today = new Date();
+    const localToday = [
+        today.getFullYear(),
+        String(today.getMonth() + 1).padStart(2, '0'),
+        String(today.getDate()).padStart(2, '0')
+    ].join('-');
+
+    return task.dueDate < localToday;
+}
+
+function taskOptions(values, selected) {
+    return values.map(value => `
+        <option value="${esc(value)}"
+            ${value === selected ? 'selected' : ''}>
+            ${esc(value)}
+        </option>
+    `).join('');
+}
+
+// -----------------------------------------------------
+// CREATE / EDIT TASK
+// -----------------------------------------------------
+
+function openStaffTaskEditor(taskId = null) {
+
+    const existing = taskId
+        ? data.tasks.find(t => t.id === taskId)
+        : null;
+
+    if (taskId && !existing) {
+        alert('Task not found.');
+        return;
+    }
+
+    const task = existing || {
+        title: '',
+        description: '',
+        assignedTo: '',
+        priority: 'Medium',
+        status: 'To Do',
+        dueDate: ''
+    };
+
+    const staffOptions = (data.staff || []).map(member => `
+        <option value="${esc(member.id)}"
+            ${member.id === task.assignedTo ? 'selected' : ''}>
+            ${esc(member.name)} — ${esc(member.role)}
+        </option>
+    `).join('');
+
+    modal(existing ? 'Edit Staff Task' : 'Create Staff Task', `
+        <form id="stmTaskForm">
+
+            <div class="field">
+                <label>Task Title</label>
+                <input
+                    name="title"
+                    required
+                    maxlength="150"
+                    value="${esc(task.title)}"
+                    placeholder="What needs to be done?"
+                >
+            </div>
+
+            <div class="field">
+                <label>Description / Instructions</label>
+                <textarea
+                    name="description"
+                    rows="5"
+                    placeholder="Explain what the staff member needs to complete..."
+                >${esc(task.description)}</textarea>
+            </div>
+
+            <div class="formgrid">
+
+                <div class="field">
+                    <label>Assign To</label>
+                    <select name="assignedTo">
+                        <option value="">Unassigned</option>
+                        ${staffOptions}
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label>Priority</label>
+                    <select name="priority">
+                        ${taskOptions(TASK_PRIORITIES, task.priority)}
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label>Status</label>
+                    <select name="status">
+                        ${taskOptions(TASK_STATUSES, task.status)}
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label>Due Date</label>
+                    <input
+                        type="date"
+                        name="dueDate"
+                        value="${esc(task.dueDate)}"
+                    >
+                </div>
+
+            </div>
+
+            <div class="actions">
+                <button type="button"
+                    class="secondary"
+                    id="stmCancel">
+                    Cancel
+                </button>
+
+                <button type="submit" class="primary">
+                    ${existing ? 'Save Changes' : 'Create Task'}
+                </button>
+            </div>
+
+        </form>
+    `);
+
+    document.getElementById('stmCancel').onclick = close;
+
+    const form = document.getElementById('stmTaskForm');
+
+    form.elements.assignedTo.value = task.assignedTo || '';
+
+    form.onsubmit = event => {
+        event.preventDefault();
+
+        const fields = form.elements;
+
+        const values = {
+            title: fields.title.value.trim(),
+            description: fields.description.value.trim(),
+            assignedTo: fields.assignedTo.value,
+            priority: fields.priority.value,
+            status: fields.status.value,
+            dueDate: fields.dueDate.value
+        };
+
+        if (!values.title) {
+            alert('Please enter a task title.');
+            return;
+        }
+
+        if (values.assignedTo &&
+            !(data.staff || []).some(s => s.id === values.assignedTo)) {
+            alert('The assigned staff member no longer exists.');
+            return;
+        }
+
+        const now = new Date().toISOString();
+
+        if (existing) {
+
+            const before = structuredClone(existing);
+
+            Object.assign(existing, values, {
+                updatedAt: now
+            });
+
+         existing.completedAt = values.status === 'Completed'
+    ? (before.status === 'Completed'
+        ? before.completedAt || now
+        : now)
+    : null;
+
+            logAudit(
+                'Staff task updated',
+                'tasks',
+                existing.id,
+                before,
+                existing,
+                `Updated task: ${existing.title}`
+            );
+
+        } else {
+
+            const newTask = {
+                id: 'TASK-' + Date.now() + '-' +
+                    Math.random().toString(36).slice(2, 6),
+                ...values,
+                createdAt: now,
+                updatedAt: now,
+                completedAt: values.status === 'Completed'
+                    ? now
+                    : null
+            };
+
+            data.tasks.push(newTask);
+
+            logAudit(
+                'Staff task created',
+                'tasks',
+                newTask.id,
+                null,
+                newTask,
+                `Created task: ${newTask.title}`
+            );
+        }
+
+        save();
+        close();
+        render();
+    };
+}
+
+// -----------------------------------------------------
+// UPDATE TASK STATUS
+// -----------------------------------------------------
+
+function updateStaffTaskStatus(taskId, newStatus) {
+
+    const task = data.tasks.find(t => t.id === taskId);
+
+    if (!task || !TASK_STATUSES.includes(newStatus)) {
+        return;
+    }
+
+    const before = structuredClone(task);
+
+    task.status = newStatus;
+    task.updatedAt = new Date().toISOString();
+
+    task.completedAt = newStatus === 'Completed'
+        ? task.updatedAt
+        : null;
+
+    logAudit(
+        'Staff task status changed',
+        'tasks',
+        task.id,
+        before,
+        task,
+        `${task.title}: ${before.status} → ${newStatus}`
+    );
+
+    save();
+    render();
+}
+
+// -----------------------------------------------------
+// RENDER TASK BOARD
+// -----------------------------------------------------
+
+function renderStaffTaskBoard() {
+
+    const tasks = data.tasks || [];
+
+    const visible = tasks.filter(task => {
+
+        const staffName = taskStaffName(task.assignedTo);
+
+        const searchable = [
+            task.id,
+            task.title,
+            task.description,
+            task.priority,
+            task.status,
+            staffName
+        ].join(' ').toLowerCase();
+
+        return (
+            searchable.includes(taskSearch.toLowerCase()) &&
+            (
+                taskStaffFilter === 'All' ||
+                task.assignedTo === taskStaffFilter
+            )
+        );
+    });
+
+    const counts = [
+        ['Total Tasks', tasks.length],
+        ['To Do', tasks.filter(t => t.status === 'To Do').length],
+        ['In Progress', tasks.filter(t => t.status === 'In Progress').length],
+        ['Completed', tasks.filter(t => t.status === 'Completed').length]
+    ];
+
+    const columns = TASK_STATUSES.map(status => {
+
+        const matching = visible
+            .filter(t => t.status === status)
+            .sort((a, b) => {
+                const priorityRank = {
+                    Critical: 4,
+                    High: 3,
+                    Medium: 2,
+                    Low: 1
+                };
+
+                return (
+                    (priorityRank[b.priority] || 0) -
+                    (priorityRank[a.priority] || 0)
+                );
+            });
+
+        return `
+            <div class="stm-column">
+
+                <h3>
+                    ${esc(status)}
+                    <span class="muted">(${matching.length})</span>
+                </h3>
+
+                ${matching.map(task => `
+
+                    <div class="stm-card">
+
+                        <h4>${esc(task.title)}</h4>
+
+                        <div>
+                            ${badge(task.priority + ' Priority')}
+                        </div>
+
+                        <p>${esc(task.description || 'No instructions provided.')}</p>
+
+                        <div class="stm-meta">
+                            <div>
+                                Assigned: ${esc(taskStaffName(task.assignedTo))}
+                            </div>
+
+                            <div class="${taskIsOverdue(task) ? 'stm-overdue' : ''}">
+                                Due: ${esc(task.dueDate || 'No deadline')}
+                                ${taskIsOverdue(task) ? ' — OVERDUE' : ''}
+                            </div>
+
+                            <div>Task ID: ${esc(task.id)}</div>
+                        </div>
+
+                        <div class="stm-actions">
+
+                            <button
+                                type="button"
+                                class="secondary"
+                                data-stm-edit="${esc(task.id)}">
+                                Edit
+                            </button>
+
+                            ${task.status === 'To Do' ? `
+                                <button
+                                    type="button"
+                                    class="secondary"
+                                    data-stm-progress="${esc(task.id)}">
+                                    Start
+                                </button>
+                            ` : ''}
+
+                            ${task.status !== 'Completed' ? `
+                                <button
+                                    type="button"
+                                    class="primary"
+                                    data-stm-complete="${esc(task.id)}">
+                                    Complete
+                                </button>
+                            ` : ''}
+
+                        </div>
+
+                    </div>
+
+                `).join('') || `
+                    <div class="stm-empty">
+                        No tasks in this category.
+                    </div>
+                `}
+
+            </div>
+        `;
+    }).join('');
+
+    document.getElementById('content').innerHTML = `
+        <div class="stm-board">
+
+            <div class="stm-header">
+                <div>
+                    <h2>Staff Task Management</h2>
+                    <p class="muted">
+                        Assign responsibilities and track staff progress.
+                    </p>
+                </div>
+
+                <button type="button"
+                    class="primary"
+                    id="stmCreate">
+                    + Create Task
+                </button>
+            </div>
+
+            <div class="stm-stats">
+                ${counts.map(([label, count]) => `
+                    <div class="stm-stat">
+                        <strong>${count}</strong>
+                        <span>${esc(label)}</span>
+                    </div>
+                `).join('')}
+            </div>
+
+            <div class="stm-toolbar">
+
+                <input
+                    type="search"
+                    id="stmSearch"
+                    placeholder="Search tasks..."
+                    value="${esc(taskSearch)}"
+                >
+
+                <select id="stmStaffFilter">
+                    <option value="All">All Staff</option>
+
+                    ${(data.staff || []).map(member => `
+                        <option value="${esc(member.id)}">
+                            ${esc(member.name)}
+                        </option>
+                    `).join('')}
+                </select>
+
+            </div>
+
+            <div class="stm-columns">
+                ${columns}
+            </div>
+
+        </div>
+    `;
+
+    document.getElementById('stmCreate').onclick = () => {
+        openStaffTaskEditor();
+    };
+
+    const search = document.getElementById('stmSearch');
+
+    search.oninput = () => {
+        taskSearch = search.value;
+        renderStaffTaskBoard();
+
+        const next = document.getElementById('stmSearch');
+        next.focus();
+        next.setSelectionRange(taskSearch.length, taskSearch.length);
+    };
+
+    const staffFilter = document.getElementById('stmStaffFilter');
+
+    staffFilter.value = taskStaffFilter;
+
+    staffFilter.onchange = () => {
+        taskStaffFilter = staffFilter.value;
+        renderStaffTaskBoard();
+    };
+
+    document.querySelectorAll('[data-stm-edit]').forEach(button => {
+        button.onclick = () => {
+            openStaffTaskEditor(button.dataset.stmEdit);
+        };
+    });
+
+    document.querySelectorAll('[data-stm-progress]').forEach(button => {
+        button.onclick = () => {
+            updateStaffTaskStatus(button.dataset.stmProgress, 'In Progress');
+        };
+    });
+
+    document.querySelectorAll('[data-stm-complete]').forEach(button => {
+        button.onclick = () => {
+            updateStaffTaskStatus(button.dataset.stmComplete, 'Completed');
+        };
+    });
+}
+
+// -----------------------------------------------------
+// CONNECT TASK BOARD TO WORKSPACE
+// -----------------------------------------------------
+
+const renderBeforeStaffTasks = render;
+
+render = function () {
+
+    if (page === 'tasks') {
+
+        nav();
+
+        document.getElementById('title').textContent = 'Staff Tasks';
+        document.getElementById('crumb').textContent = 'Staff Tasks';
+
+        document.getElementById('subtitle').textContent =
+            'Leadership task assignments and staff responsibilities';
+
+        document.getElementById('add').style.display = 'none';
+
+        renderStaffTaskBoard();
+
+        if (typeof renderNotificationCentre === 'function') {
+            renderNotificationCentre();
+        }
+
+        return;
+    }
+
+    renderBeforeStaffTasks();
 };
    
 // Render the workspace.
