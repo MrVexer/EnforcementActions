@@ -3287,6 +3287,199 @@
         align-items: flex-start;
     }
 }
+
+   /* ==========================================
+   PERMISSION COMPARISON MATRIX
+========================================== */
+
+.pcm-panel {
+    margin-top: 20px;
+    padding: 22px;
+    background: #211e22;
+    border: 1px solid #49343e;
+    border-radius: 12px;
+}
+
+.pcm-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.pcm-header h2 {
+    margin: 0 0 6px;
+    font-size: 19px;
+}
+
+.pcm-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.pcm-stat {
+    background: #2d252b;
+    border: 1px solid #49343e;
+    border-radius: 9px;
+    padding: 15px;
+}
+
+.pcm-stat strong {
+    display: block;
+    font-size: 23px;
+    color: #f1b0bf;
+}
+
+.pcm-stat small {
+    color: #b7aab2;
+    font-size: 11px;
+}
+
+.pcm-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.pcm-toolbar input,
+.pcm-toolbar select {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.pcm-scroll {
+    overflow-x: auto;
+    border: 1px solid #49343e;
+    border-radius: 9px;
+}
+
+.pcm-table {
+    width: 100%;
+    min-width: 1120px;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 12px;
+}
+
+.pcm-table th,
+.pcm-table td {
+    padding: 11px 10px;
+    border-bottom: 1px solid #40333b;
+    text-align: center;
+}
+
+.pcm-table thead th {
+    background: #352830;
+    color: #f4dfe6;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.pcm-table th:first-child,
+.pcm-table td:first-child {
+    text-align: left;
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    min-width: 210px;
+    background: #292329;
+}
+
+.pcm-table thead th:first-child {
+    z-index: 3;
+    background: #352830;
+}
+
+.pcm-table .pcm-category td {
+    text-align: left;
+    background: #422d37;
+    color: #f2d0db;
+    font-weight: 750;
+}
+
+.pcm-table .pcm-category td:first-child {
+    position: static;
+}
+
+.pcm-table .pcm-total td {
+    background: #352830;
+    font-weight: 750;
+}
+
+.pcm-role-name {
+    display: block;
+    max-width: 125px;
+    margin: auto;
+    white-space: normal;
+    line-height: 1.4;
+}
+
+.pcm-yes,
+.pcm-no,
+.pcm-risk {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    font-weight: 800;
+}
+
+.pcm-yes {
+    background: #203b30;
+    color: #9ce6b7;
+}
+
+.pcm-no {
+    background: #353036;
+    color: #a9a0a7;
+}
+
+.pcm-risk {
+    background: #5b3920;
+    color: #ffd18a;
+}
+
+.pcm-warnings {
+    margin-top: 18px;
+    padding: 16px;
+    background: #2d252b;
+    border: 1px solid #49343e;
+    border-radius: 9px;
+}
+
+.pcm-warning {
+    padding: 11px 0;
+    border-bottom: 1px solid #49343e;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.pcm-warning:last-child {
+    border-bottom: none;
+}
+
+.pcm-warning strong {
+    color: #f0c989;
+}
+
+@media (max-width: 650px) {
+    .pcm-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .pcm-panel {
+        padding: 14px;
+    }
+}
    
   </style>
  </head>
@@ -11251,6 +11444,611 @@ renderStaffAdministration = function () {
     pageContainer.appendChild(mount);
 
     apmRefresh();
+};
+
+   // =====================================================
+// VENGEFUL REALMS — PERMISSION COMPARISON MATRIX
+// =====================================================
+
+// Read-only comparison of Advanced Permission Management.
+// Uses the saved APM permissions for every staff role.
+
+let pcmSearch = '';
+let pcmCategory = 'All Categories';
+let pcmView = 'all';
+
+// These combinations are review recommendations,
+// not automatic permission restrictions.
+const PCM_SENSITIVE_PERMISSIONS = new Set([
+    'players.delete',
+    'infractions.delete',
+    'punishments.delete',
+    'punishments.revoke',
+    'staff.remove',
+    'staff.manage',
+    'settings.manage',
+    'permissions.manage',
+    'discord.manage'
+]);
+
+const PCM_REVIEW_ROLES = new Set([
+    'Enforcement Officer',
+    'Trial Enforcement',
+    'Support Team',
+    'Story Team'
+]);
+
+function pcmRoles() {
+    return Object.keys(SA_PERMISSIONS);
+}
+
+function pcmPermissions() {
+
+    const result = {};
+
+    pcmRoles().forEach(role => {
+        result[role] = apmSavedPermissions(role);
+    });
+
+    return result;
+}
+
+function pcmWarnings(permissions) {
+
+    const warnings = [];
+
+    pcmRoles().forEach(role => {
+
+        if (!PCM_REVIEW_ROLES.has(role)) {
+            return;
+        }
+
+        APM_CATALOG.forEach(group => {
+
+            group.items.forEach(([key, title]) => {
+
+                if (
+                    PCM_SENSITIVE_PERMISSIONS.has(key) &&
+                    permissions[role][key] === true
+                ) {
+                    warnings.push({
+                        role,
+                        key,
+                        title,
+                        message:
+                            'This sensitive permission is enabled ' +
+                            'for a role that may require additional review.'
+                    });
+                }
+
+            });
+
+        });
+
+    });
+
+    return warnings;
+}
+
+function pcmMatchesFilter(key, title, group) {
+
+    const search = pcmSearch.trim().toLowerCase();
+
+    const matchesSearch =
+        !search ||
+        title.toLowerCase().includes(search) ||
+        key.toLowerCase().includes(search) ||
+        group.toLowerCase().includes(search);
+
+    const matchesCategory =
+        pcmCategory === 'All Categories' ||
+        pcmCategory === group;
+
+    return matchesSearch && matchesCategory;
+}
+
+function pcmVisibleItems() {
+
+    return APM_CATALOG.map(group => ({
+
+        group: group.group,
+
+        items: group.items.filter(([key, title]) =>
+            pcmMatchesFilter(key, title, group.group)
+        )
+
+    })).filter(group => group.items.length > 0);
+}
+
+function pcmRenderManager() {
+
+    const roles = pcmRoles();
+
+    const permissions = pcmPermissions();
+
+    const warnings = pcmWarnings(permissions);
+
+    const riskyKeys = new Set(
+        warnings.map(item => `${item.role}:${item.key}`)
+    );
+
+    const visibleGroups = pcmVisibleItems();
+
+    const totalEnabled = roles.reduce((sum, role) =>
+        sum + apmPermissionCount(permissions[role]), 0
+    );
+
+    const categories = [
+        'All Categories',
+        ...APM_CATALOG.map(group => group.group)
+    ];
+
+    const header = roles.map(role => `
+        <th scope="col">
+            <span class="pcm-role-name">
+                ${esc(role)}
+            </span>
+        </th>
+    `).join('');
+
+    const rows = visibleGroups.map(group => {
+
+        const categoryRow = `
+            <tr class="pcm-category">
+                <td colspan="${roles.length + 1}">
+                    ${esc(group.group)}
+                </td>
+            </tr>
+        `;
+
+        const permissionRows = group.items.map(item => {
+
+            const [key, title, description] = item;
+
+            const cells = roles.map(role => {
+
+                const enabled =
+                    permissions[role][key] === true;
+
+                const flagged = riskyKeys.has(
+                    `${role}:${key}`
+                );
+
+                const className = !enabled
+                    ? 'pcm-no'
+                    : flagged
+                        ? 'pcm-risk'
+                        : 'pcm-yes';
+
+                const symbol = !enabled
+                    ? '—'
+                    : flagged
+                        ? '!'
+                        : '✓';
+
+                const label = flagged
+                    ? 'Enabled — review recommended'
+                    : enabled
+                        ? 'Enabled'
+                        : 'Disabled';
+
+                return `
+                    <td title="${esc(role)}: ${esc(label)}">
+                        <span
+                            class="${className}"
+                            aria-label="${esc(label)}">
+                            ${symbol}
+                        </span>
+                    </td>
+                `;
+
+            }).join('');
+
+            return `
+                <tr>
+                    <td title="${esc(description)}">
+                        ${esc(title)}
+                    </td>
+                    ${cells}
+                </tr>
+            `;
+
+        }).join('');
+
+        return categoryRow + permissionRows;
+
+    }).join('');
+
+    const totals = roles.map(role => `
+        <td>
+            ${apmPermissionCount(permissions[role])}
+            /
+            ${APM_ALL_KEYS.length}
+        </td>
+    `).join('');
+
+    const warningItems = warnings.filter(item => {
+
+        if (pcmView === 'all') return true;
+
+        return pcmMatchesFilter(
+            item.key,
+            item.title,
+            APM_CATALOG.find(group =>
+                group.items.some(entry =>
+                    entry[0] === item.key
+                )
+            )?.group || ''
+        );
+
+    });
+
+    return `
+        <section class="pcm-panel">
+
+            <div class="pcm-header">
+
+                <div>
+                    <h2>Permission Comparison Matrix</h2>
+
+                    <p class="drc-muted">
+                        Compare saved action permissions
+                        across every staff role.
+                    </p>
+                </div>
+
+                <span class="sa-tag">
+                    Read-Only Comparison
+                </span>
+
+            </div>
+
+            <div class="pcm-summary">
+
+                <div class="pcm-stat">
+                    <strong>${roles.length}</strong>
+                    <small>Staff Roles</small>
+                </div>
+
+                <div class="pcm-stat">
+                    <strong>${totalEnabled}</strong>
+                    <small>Total Enabled Role Permissions</small>
+                </div>
+
+                <div class="pcm-stat">
+                    <strong>${warnings.length}</strong>
+                    <small>Permission Review Flags</small>
+                </div>
+
+            </div>
+
+            <div class="pcm-toolbar">
+
+                <input
+                    type="search"
+                    id="pcmSearch"
+                    placeholder="Search permissions..."
+                    value="${esc(pcmSearch)}"
+                    aria-label="Search permissions"
+                >
+
+                <select
+                    id="pcmCategory"
+                    aria-label="Filter permission category">
+
+                    ${categories.map(category => `
+                        <option
+                            value="${esc(category)}"
+                            ${
+                                category === pcmCategory
+                                    ? 'selected'
+                                    : ''
+                            }>
+                            ${esc(category)}
+                        </option>
+                    `).join('')}
+
+                </select>
+
+                <select
+                    id="pcmView"
+                    aria-label="Permission display filter">
+
+                    <option value="all"
+                        ${pcmView === 'all' ? 'selected' : ''}>
+                        All Permissions
+                    </option>
+
+                    <option value="enabled"
+                        ${pcmView === 'enabled' ? 'selected' : ''}>
+                        Enabled Somewhere
+                    </option>
+
+                    <option value="flagged"
+                        ${pcmView === 'flagged' ? 'selected' : ''}>
+                        Review Flags Only
+                    </option>
+
+                </select>
+
+            </div>
+
+            <div class="pcm-scroll">
+
+                <table class="pcm-table">
+
+                    <thead>
+                        <tr>
+                            <th scope="col">Permission</th>
+                            ${header}
+                        </tr>
+                    </thead>
+
+                    <tbody>
+
+                        ${
+                            rows ||
+                            `<tr>
+                                <td colspan="${roles.length + 1}">
+                                    No matching permissions.
+                                </td>
+                            </tr>`
+                        }
+
+                        <tr class="pcm-total">
+                            <td>Enabled Permissions (All Categories)</td>
+                            ${totals}
+                        </tr>
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+            <div class="pcm-warnings">
+
+                <strong>Permission Review</strong>
+
+                <p class="drc-muted">
+                    Flags identify sensitive permissions
+                    assigned to selected lower-level roles.
+                    They are recommendations, not confirmed
+                    security violations.
+                </p>
+
+                ${
+                    warningItems.length
+                        ? warningItems.map(item => `
+                            <div class="pcm-warning">
+
+                                <strong>${esc(item.role)}</strong>
+
+                                <div>
+                                    ${esc(item.title)}
+                                </div>
+
+                                <div class="drc-muted">
+                                    ${esc(item.message)}
+                                </div>
+
+                            </div>
+                        `).join('')
+                        : `<p class="drc-muted">
+                            No matching review flags.
+                        </p>`
+                }
+
+            </div>
+
+            <div class="apm-notice">
+
+                <strong>
+                    Configuration Preview Only
+                </strong>
+
+                <p>
+                    This matrix reflects locally saved
+                    Advanced Permission Management settings.
+                    It does not authenticate staff members,
+                    enforce access, or change any permissions.
+                </p>
+
+            </div>
+
+        </section>
+    `;
+}
+
+// =====================================================
+// FILTERING AND REFRESH
+// =====================================================
+
+function pcmApplyViewFilter() {
+
+    const permissions = pcmPermissions();
+
+    const warnings = new Set(
+        pcmWarnings(permissions).map(item =>
+            `${item.role}:${item.key}`
+        )
+    );
+
+    const visible = pcmVisibleItems();
+
+    if (pcmView === 'all') {
+        return visible;
+    }
+
+    return visible.map(group => ({
+
+        group: group.group,
+
+        items: group.items.filter(([key]) => {
+
+            if (pcmView === 'enabled') {
+
+                return pcmRoles().some(role =>
+                    permissions[role][key] === true
+                );
+
+            }
+
+            if (pcmView === 'flagged') {
+
+                return pcmRoles().some(role =>
+                    warnings.has(`${role}:${key}`)
+                );
+
+            }
+
+            return true;
+
+        })
+
+    })).filter(group => group.items.length);
+}
+
+// Apply the display filter to the table rendering.
+const pcmOriginalVisibleItems = pcmVisibleItems;
+
+pcmVisibleItems = function () {
+
+    const all = APM_CATALOG.map(group => ({
+
+        group: group.group,
+
+        items: group.items.filter(([key, title]) =>
+            pcmMatchesFilter(
+                key,
+                title,
+                group.group
+            )
+        )
+
+    })).filter(group => group.items.length);
+
+    if (pcmView === 'all') {
+        return all;
+    }
+
+    const permissions = pcmPermissions();
+
+    const flagged = new Set(
+        pcmWarnings(permissions).map(item =>
+            `${item.role}:${item.key}`
+        )
+    );
+
+    return all.map(group => ({
+
+        group: group.group,
+
+        items: group.items.filter(([key]) => {
+
+            if (pcmView === 'enabled') {
+
+                return pcmRoles().some(role =>
+                    permissions[role][key] === true
+                );
+
+            }
+
+            return pcmRoles().some(role =>
+                flagged.has(`${role}:${key}`)
+            );
+
+        })
+
+    })).filter(group => group.items.length);
+};
+
+function pcmRefresh() {
+
+    const mount = document.getElementById(
+        'pcmManagerMount'
+    );
+
+    if (!mount) return;
+
+    mount.innerHTML = pcmRenderManager();
+
+    const search = document.getElementById('pcmSearch');
+
+    const category = document.getElementById('pcmCategory');
+
+    const view = document.getElementById('pcmView');
+
+    if (search) {
+
+        search.oninput = () => {
+
+            pcmSearch = search.value;
+
+            const position = search.selectionStart;
+
+            pcmRefresh();
+
+            const next = document.getElementById('pcmSearch');
+
+            if (next) {
+
+                next.focus();
+
+                try {
+                    next.setSelectionRange(position, position);
+                } catch (error) {
+                    // Some input types do not support selection.
+                }
+            }
+        };
+    }
+
+    if (category) {
+
+        category.onchange = () => {
+
+            pcmCategory = category.value;
+
+            pcmRefresh();
+        };
+    }
+
+    if (view) {
+
+        view.onchange = () => {
+
+            pcmView = view.value;
+
+            pcmRefresh();
+        };
+    }
+}
+
+// =====================================================
+// EXTEND STAFF ADMINISTRATION
+// =====================================================
+
+const renderStaffAdminBeforeComparison =
+    renderStaffAdministration;
+
+renderStaffAdministration = function () {
+
+    renderStaffAdminBeforeComparison();
+
+    const pageContainer = document.querySelector(
+        '.sa-page'
+    );
+
+    if (!pageContainer) return;
+
+    const mount = document.createElement('div');
+
+    mount.id = 'pcmManagerMount';
+
+    pageContainer.appendChild(mount);
+
+    pcmRefresh();
 };
    
 // Render the workspace.
