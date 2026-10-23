@@ -2596,6 +2596,104 @@
         grid-template-columns: repeat(2, 1fr);
     }
 }
+
+   /* ==========================================
+   STAFF DOCUMENT LIBRARY
+========================================== */
+
+.docs-page {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.docs-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.docs-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.docs-toolbar input {
+    flex: 1;
+    min-width: 220px;
+}
+
+.docs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+}
+
+.docs-card {
+    padding: 19px;
+    border: 1px solid #49353f;
+    border-radius: 11px;
+    background: #242025;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.docs-card h3 {
+    margin: 0;
+    font-size: 16px;
+    color: #fff;
+    overflow-wrap: anywhere;
+}
+
+.docs-card p {
+    margin: 0;
+    color: #bdb1b9;
+    font-size: 12px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.docs-category {
+    align-self: flex-start;
+    padding: 5px 9px;
+    border-radius: 6px;
+    background: #492630;
+    color: #f4a1ae;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.docs-meta {
+    color: #aaa0a8;
+    font-size: 11px;
+    line-height: 1.8;
+}
+
+.docs-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: auto;
+}
+
+.docs-actions a {
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+}
+
+.docs-empty {
+    padding: 35px;
+    text-align: center;
+    color: #aaa0a8;
+    border: 1px dashed #49353f;
+    border-radius: 10px;
+}
    
   </style>
  </head>
@@ -2723,6 +2821,13 @@ KEYS.push('staff');
 
 LABEL.staff = 'Staff Directory';
 ICON.staff = '♙';
+   // Staff Document Library
+if (!KEYS.includes('docs')) {
+    KEYS.push('docs');
+}
+
+LABEL.docs = 'Docs';
+ICON.docs = '▤';
    // Register Staff Tasks
 if (!KEYS.includes('tasks')) {
     KEYS.push('tasks');
@@ -7966,6 +8071,492 @@ render = function () {
     }
 
     renderBeforeStaffTasks();
+};
+
+   // =====================================================
+// VENGEFUL REALMS — STAFF DOCUMENT LIBRARY
+// =====================================================
+
+if (!Array.isArray(data.docs)) {
+    data.docs = [];
+    save();
+}
+
+let docsSearch = '';
+let docsFilter = 'All';
+
+const DOC_CATEGORIES = [
+    'General',
+    'Enforcement',
+    'Investigations',
+    'Staff Guidelines',
+    'Procedures',
+    'Meetings',
+    'Training',
+    'Story Team',
+    'Other'
+];
+
+function validGoogleDocUrl(value) {
+    try {
+        const url = new URL(value);
+
+        return url.protocol === 'https:' &&
+            (
+                url.hostname === 'docs.google.com' ||
+                url.hostname === 'drive.google.com'
+            );
+    } catch {
+        return false;
+    }
+}
+
+function openDocsEditor(docId = null) {
+
+    const existing = docId
+        ? data.docs.find(doc => doc.id === docId)
+        : null;
+
+    if (docId && !existing) {
+        alert('Document not found.');
+        return;
+    }
+
+    const doc = existing || {
+        title: '',
+        description: '',
+        url: '',
+        category: 'General',
+        author: ''
+    };
+
+    modal(existing ? 'Edit Document' : 'Add Document', `
+        <form id="docsForm">
+
+            <div class="field">
+                <label>Document Title</label>
+                <input
+                    name="title"
+                    required
+                    maxlength="150"
+                    value="${esc(doc.title)}"
+                    placeholder="Document name"
+                >
+            </div>
+
+            <div class="field">
+                <label>Google Docs Link</label>
+                <input
+                    name="url"
+                    type="url"
+                    required
+                    value="${esc(doc.url)}"
+                    placeholder="https://docs.google.com/document/d/..."
+                >
+            </div>
+
+            <div class="field">
+                <label>Description</label>
+                <textarea
+                    name="description"
+                    rows="4"
+                    placeholder="What is this document for?"
+                >${esc(doc.description)}</textarea>
+            </div>
+
+            <div class="formgrid">
+
+                <div class="field">
+                    <label>Category</label>
+                    <select name="category">
+                        ${DOC_CATEGORIES.map(category => `
+                            <option value="${esc(category)}"
+                                ${category === doc.category ? 'selected' : ''}>
+                                ${esc(category)}
+                            </option>
+                        `).join('')}
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label>Added By</label>
+                    <select name="author" required>
+                        <option value="">Select staff member</option>
+
+                        ${(data.staff || []).map(member => `
+                            <option value="${esc(member.id)}"
+                                ${member.id === doc.author ? 'selected' : ''}>
+                                ${esc(member.name)}
+                            </option>
+                        `).join('')}
+                    </select>
+                </div>
+
+            </div>
+
+            <div class="actions">
+
+                <button type="button"
+                    class="secondary"
+                    id="docsCancel">
+                    Cancel
+                </button>
+
+                <button type="submit" class="primary">
+                    ${existing ? 'Save Changes' : 'Add Document'}
+                </button>
+
+            </div>
+
+        </form>
+    `);
+
+    document.getElementById('docsCancel').onclick = close;
+
+    const form = document.getElementById('docsForm');
+
+    form.onsubmit = event => {
+
+        event.preventDefault();
+
+        const fields = form.elements;
+
+        const values = {
+            title: fields.namedItem('title').value.trim(),
+            url: fields.namedItem('url').value.trim(),
+            description: fields.namedItem('description').value.trim(),
+            category: fields.namedItem('category').value,
+            author: fields.namedItem('author').value
+        };
+
+        if (!validGoogleDocUrl(values.url)) {
+            alert(
+                'Please enter a valid HTTPS Google Docs or Google Drive link.'
+            );
+            return;
+        }
+
+        if (!(data.staff || []).some(
+            member => member.id === values.author
+        )) {
+            alert('Please select a valid staff member.');
+            return;
+        }
+
+        const now = new Date().toISOString();
+
+        if (existing) {
+
+            const before = structuredClone(existing);
+
+            Object.assign(existing, values, {
+                updatedAt: now
+            });
+
+            logAudit(
+                'Document updated',
+                'docs',
+                existing.id,
+                before,
+                existing,
+                `Updated document: ${existing.title}`
+            );
+
+        } else {
+
+            const newDoc = {
+                id: 'DOC-' + Date.now() + '-' +
+                    Math.random().toString(36).slice(2, 6),
+                ...values,
+                createdAt: now,
+                updatedAt: now
+            };
+
+            data.docs.push(newDoc);
+
+            logAudit(
+                'Document added',
+                'docs',
+                newDoc.id,
+                null,
+                newDoc,
+                `Added document: ${newDoc.title}`
+            );
+        }
+
+        save();
+        close();
+        render();
+    };
+}
+
+// -----------------------------------------------------
+// DELETE DOCUMENT LINK
+// -----------------------------------------------------
+
+function deleteDocsEntry(docId) {
+
+    const doc = data.docs.find(item => item.id === docId);
+
+    if (!doc) return;
+
+    if (!confirm(
+        `Remove "${doc.title}" from the Docs Library?\n\n` +
+        `This removes the saved link only. ` +
+        `The original Google Doc will not be deleted.`
+    )) {
+        return;
+    }
+
+    const before = structuredClone(doc);
+
+    data.docs = data.docs.filter(item => item.id !== docId);
+
+    logAudit(
+        'Document removed',
+        'docs',
+        docId,
+        before,
+        null,
+        `Removed document link: ${doc.title}`
+    );
+
+    save();
+    render();
+}
+
+// -----------------------------------------------------
+// RENDER DOCUMENT LIBRARY
+// -----------------------------------------------------
+
+function renderDocsLibrary() {
+
+    const allDocs = data.docs || [];
+
+    const filtered = allDocs.filter(doc => {
+
+        const author = (data.staff || [])
+            .find(member => member.id === doc.author);
+
+        const searchable = [
+            doc.title,
+            doc.description,
+            doc.category,
+            author?.name || '',
+            doc.url
+        ].join(' ').toLowerCase();
+
+        return (
+            searchable.includes(docsSearch.toLowerCase()) &&
+            (
+                docsFilter === 'All' ||
+                doc.category === docsFilter
+            )
+        );
+
+    }).sort((a, b) =>
+        (b.updatedAt || '').localeCompare(a.updatedAt || '')
+    );
+
+    document.getElementById('content').innerHTML = `
+        <div class="docs-page">
+
+            <div class="docs-header">
+
+                <div>
+                    <h2>Staff Document Library</h2>
+                    <p class="muted">
+                        Store and organise Google Docs links for staff reference.
+                    </p>
+                </div>
+
+                <button
+                    type="button"
+                    class="primary"
+                    id="docsAdd">
+                    + Add Document
+                </button>
+
+            </div>
+
+            <div class="docs-toolbar">
+
+                <input
+                    type="search"
+                    id="docsSearch"
+                    placeholder="Search documents, authors, categories..."
+                    value="${esc(docsSearch)}"
+                >
+
+                <select id="docsCategoryFilter">
+                    <option value="All">All Categories</option>
+
+                    ${DOC_CATEGORIES.map(category => `
+                        <option value="${esc(category)}">
+                            ${esc(category)}
+                        </option>
+                    `).join('')}
+                </select>
+
+            </div>
+
+            <p class="muted">
+                ${filtered.length} of ${allDocs.length} documents
+            </p>
+
+            <div class="docs-grid">
+
+                ${filtered.map(doc => {
+
+                    const author = (data.staff || [])
+                        .find(member => member.id === doc.author);
+
+                    const authorName = author?.name || 'Former / Unknown Staff';
+
+                    return `
+                        <div class="docs-card">
+
+                            <span class="docs-category">
+                                ${esc(doc.category)}
+                            </span>
+
+                            <h3>${esc(doc.title)}</h3>
+
+                            <p>
+                                ${esc(doc.description || 'No description provided.')}
+                            </p>
+
+                            <div class="docs-meta">
+                                <div>Added by: ${esc(authorName)}</div>
+                                <div>
+                                    Updated:
+                                    ${esc(
+                                        doc.updatedAt
+                                            ? new Date(doc.updatedAt).toLocaleDateString('en-AU')
+                                            : 'Unknown'
+                                    )}
+                                </div>
+                            </div>
+
+                            <div class="docs-actions">
+
+                                <a
+                                    class="primary"
+                                    href="${esc(doc.url)}"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    Open Document ↗
+                                </a>
+
+                                <button
+                                    type="button"
+                                    class="secondary"
+                                    data-docs-edit="${esc(doc.id)}">
+                                    Edit
+                                </button>
+
+                                <button
+                                    type="button"
+                                    class="secondary"
+                                    data-docs-delete="${esc(doc.id)}"
+                                    style="color:#ff8b9b;">
+                                    Remove
+                                </button>
+
+                            </div>
+
+                        </div>
+                    `;
+
+                }).join('') || `
+                    <div class="docs-empty">
+                        No documents found.
+                        Add a Google Docs link to get started.
+                    </div>
+                `}
+
+            </div>
+
+        </div>
+    `;
+
+    document.getElementById('docsAdd').onclick = () => {
+        openDocsEditor();
+    };
+
+    const search = document.getElementById('docsSearch');
+
+    search.oninput = () => {
+
+        docsSearch = search.value;
+        const position = search.selectionStart;
+
+        renderDocsLibrary();
+
+        const next = document.getElementById('docsSearch');
+        next.focus();
+        next.setSelectionRange(position, position);
+    };
+
+    const categoryFilter = document.getElementById('docsCategoryFilter');
+
+    categoryFilter.value = docsFilter;
+
+    categoryFilter.onchange = () => {
+        docsFilter = categoryFilter.value;
+        renderDocsLibrary();
+    };
+
+    document.querySelectorAll('[data-docs-edit]')
+        .forEach(button => {
+
+            button.onclick = () => {
+                openDocsEditor(button.dataset.docsEdit);
+            };
+
+        });
+
+    document.querySelectorAll('[data-docs-delete]')
+        .forEach(button => {
+
+            button.onclick = () => {
+                deleteDocsEntry(button.dataset.docsDelete);
+            };
+
+        });
+}
+
+// -----------------------------------------------------
+// CONNECT DOCS LIBRARY TO WORKSPACE
+// -----------------------------------------------------
+
+const renderBeforeDocsLibrary = render;
+
+render = function () {
+
+    if (page === 'docs') {
+
+        nav();
+
+        document.getElementById('title').textContent = 'Docs';
+        document.getElementById('crumb').textContent = 'Docs';
+
+        document.getElementById('subtitle').textContent =
+            'Staff documents, procedures and reference materials';
+
+        document.getElementById('add').style.display = 'none';
+
+        renderDocsLibrary();
+
+        if (typeof renderNotificationCentre === 'function') {
+            renderNotificationCentre();
+        }
+
+        return;
+    }
+
+    renderBeforeDocsLibrary();
 };
    
 // Render the workspace.
