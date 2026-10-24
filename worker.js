@@ -950,9 +950,7 @@ if (
           console.error("Appeal RPC failed",response.status,detail.code,detail.message);
           // Diagnostic only: the caller has already passed Discord staff verification.
           // Do not expose SQL details or credentials in this response.
-          const safeCode=typeof detail.code==="string"?detail.code.slice(0,20):"unknown";
-          const safeMessage=typeof detail.message==="string"?detail.message.slice(0,300):"No database message";
-          return json({error:`Appeal database error (${safeCode}): ${safeMessage}`},503);
+          return json({error:"Appeal database operation failed"},503);
         };
         const rpc=async(name,params)=>{
           const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`,{method:"POST",headers,body:JSON.stringify(params),cache:"no-store"});
@@ -995,6 +993,76 @@ if (
         console.error("Appeal API failure",error);
         return json({error:"Appeal service unavailable"},503);
       }
+    }
+
+    // Section 5: shared staff directory. Never grants or changes Discord roles.
+    if (url.pathname === "/api/staff" || url.pathname.startsWith("/api/staff/")) {
+      const collection=url.pathname==="/api/staff";
+      if (!(collection?["GET","POST"]:["PUT","DELETE"]).includes(request.method))
+        return json({error:"Method not allowed"},405);
+      try {
+        const auth=await verifyStaff(request,env);
+        if (!auth.ok) return auth;
+        const staff=await auth.json();
+        const roles=staff.roles||[];
+        const editors=["operations_manager","head_of_enforcement"];
+        const readers=[...editors,"enforcement_captain","enforcement_officer","trial_enforcement","support_team"];
+        const allowed=request.method==="GET"?readers:editors;
+        if (!staff.authorized || !roles.some(role=>allowed.includes(role)))
+          return json({error:"Insufficient permissions"},403);
+        if (!env.SUPABASE_SECRET_KEY) return json({error:"Database unavailable"},503);
+        const headers={apikey:env.SUPABASE_SECRET_KEY,"Content-Type":"application/json",Accept:"application/json"};
+        if (request.method==="GET") {
+          const response=await fetch(`${SUPABASE_URL}/rest/v1/vr_staff?select=id,record,updated_at&order=updated_at.desc&limit=500`,{headers,cache:"no-store"});
+          if (!response.ok) return json({error:"Unable to load staff directory"},503);
+          return json({success:true,staff:await response.json()});
+        }
+        const id=collection?crypto.randomUUID():decodeURIComponent(url.pathname.slice("/api/staff/".length));
+        const uuid=/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i;
+        if (!uuid.test(id)) return json({error:"Invalid staff record ID"},400);
+        const raw=await request.text();
+        if (new TextEncoder().encode(raw).length>16384) return json({error:"Request too large"},413);
+        let input;
+        try {input=JSON.parse(raw)} catch {return json({error:"Invalid JSON"},400)}
+        if (!input || typeof input!=="object" || Array.isArray(input)) return json({error:"Invalid staff payload"},400);
+        const expected=input.expectedUpdatedAt;
+        if (!collection && (typeof expected!=="string" || !Number.isFinite(Date.parse(expected))))
+          return json({error:"Invalid record version"},400);
+        const actor={p_actor_discord_id:staff.discordId,p_actor_username:staff.username};
+        const rpc=async(name,params)=>{
+          const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`,{method:"POST",headers,body:JSON.stringify(params),cache:"no-store"});
+          if (response.ok) return json(await response.json(),request.method==="POST"?201:200);
+          const detail=await response.json().catch(()=>({}));
+          if (detail.code==="P0001") return json({error:"This staff record changed. Refresh and try again."},409);
+          if (detail.code==="P0002") return json({error:"Staff record not found"},404);
+          if (detail.code==="23505") return json({error:"This Discord ID is already registered"},409);
+          console.error("Staff RPC error",response.status,detail.code);
+          return json({error:"Staff database operation failed"},503);
+        };
+        if (request.method==="DELETE") return rpc("vr_archive_staff",{p_id:id,...actor,p_expected_updated_at:expected});
+        const limits={name:100,discordId:20,role:40,status:20,team:80,joinedAt:10,notes:4000};
+        const fields={};
+        for (const [key,max] of Object.entries(limits)) {
+          if (typeof input[key]!=="string" || input[key].length>max) return json({error:`Invalid ${key}`},400);
+          fields[key]=input[key].trim();
+        }
+        if (!fields.name) return json({error:"Staff name is required"},400);
+        if (fields.discordId && !/^\d{17,20}$/.test(fields.discordId)) return json({error:"Discord ID must be 17–20 digits"},400);
+        if (!["Operations Manager","Head of Enforcement","Enforcement Captain","Enforcement Officer","Trial Enforcement","Support Team","Story Team"].includes(fields.role))
+          return json({error:"Invalid staff role"},400);
+        if (!["Active","On Leave","Inactive","Archived"].includes(fields.status)) return json({error:"Invalid status"},400);
+        if (fields.joinedAt && !/^\d{4}-\d{2}-\d{2}$/.test(fields.joinedAt)) return json({error:"Invalid join date"},400);
+        let record;
+        if (collection) record={id,...fields,createdAt:new Date().toISOString()};
+        else {
+          const response=await fetch(`${SUPABASE_URL}/rest/v1/vr_staff?id=eq.${encodeURIComponent(id)}&select=id,record&limit=1`,{headers,cache:"no-store"});
+          if (!response.ok) return json({error:"Unable to load staff record"},503);
+          const rows=await response.json();
+          if (!rows.length) return json({error:"Staff record not found"},404);
+          record={...rows[0].record,id,...fields};
+        }
+        return rpc(collection?"vr_create_staff":"vr_update_staff",{p_id:id,p_record:record,...actor,...(collection?{}:{p_expected_updated_at:expected})});
+      } catch(error) {console.error("Staff API error",error);return json({error:"Staff service unavailable"},503)}
     }
 
     if (url.pathname.startsWith("/api/")) {
