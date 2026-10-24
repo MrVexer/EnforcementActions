@@ -3868,15 +3868,22 @@ function setWorkspaceAccess(authorized) {
                   );
 
                   if (
-                    playersResponse.ok &&
-                    playersResult.success === true
-                  ) {
-                    message.textContent =
-                      "Discord verified. Database connected. " +
-                      "Player Database accessible: " +
-                      playersResult.count +
-                      " records found. " +
-                      "Workspace remains locked.";
+                    if (
+  playersResponse.ok &&
+  playersResult.success === true &&
+  verification.authorized === true &&
+  dbResponse.ok &&
+  dbResult.database === "connected"
+) {
+  if (currentUpdate !== updateCounter) return;
+
+  message.textContent =
+    "Discord verified. Database connected. " +
+    "Player Database accessible: " +
+    playersResult.count +
+    " records found.";
+
+  setWorkspaceAccess(true);
                   } else {
                     message.textContent =
                       "Player Database access failed: " +
@@ -3939,7 +3946,8 @@ function setWorkspaceAccess(authorized) {
     });
 
     logoutButton.addEventListener("click", async () => {
-      ++updateCounter;
+  ++updateCounter;
+  setWorkspaceAccess(false);
 
       const { error } = await client.auth.signOut();
 
