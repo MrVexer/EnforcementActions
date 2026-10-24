@@ -3718,9 +3718,44 @@
       publishableKey
     );
 
+    // Verify the current Discord roles through Cloudflare.
+    async function verifyDiscordStaffAccess(session) {
+      if (!session?.access_token) {
+        return {
+          authorized: false,
+          error: "Not logged in"
+        };
+      }
+
+      try {
+        const response = await fetch("/api/auth/verify", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`
+          },
+          cache: "no-store"
+        });
+
+        return await response.json();
+      } catch (error) {
+        console.error("Discord verification failed:", error);
+
+        return {
+          authorized: false,
+          error: "Unable to verify Discord roles"
+        };
+      }
+    }
+
+    let updateCounter = 0;
+
     async function updateLoginState() {
+      const currentUpdate = ++updateCounter;
+
       const { data, error } =
         await client.auth.getUser();
+
+      if (currentUpdate !== updateCounter) return;
 
       if (error && !data?.user) {
         message.textContent = "";
@@ -3737,8 +3772,35 @@
         logoutButton.hidden = false;
 
         message.textContent =
-          "Identity verified. Staff access is not yet enabled. " +
-          "Server-side Discord role verification is required.";
+          "Checking your Discord staff roles...";
+
+        const { data: sessionData } =
+          await client.auth.getSession();
+
+        if (currentUpdate !== updateCounter) return;
+
+        const verification =
+          await verifyDiscordStaffAccess(sessionData?.session);
+
+        if (currentUpdate !== updateCounter) return;
+
+        if (verification.authorized === true) {
+          const roleName = verification.primaryRole
+            .replaceAll("_", " ")
+            .replace(/\b\w/g, letter => letter.toUpperCase());
+
+          message.textContent =
+            "Discord staff verified: " + roleName +
+            ". Workspace access remains locked " +
+            "until database security is configured.";
+        } else {
+          message.textContent =
+            "Access denied: " +
+            (verification.error || "Staff verification failed");
+        }
+
+        console.log("Discord staff verification:", verification);
+
       } else {
         description.textContent =
           "Sign in with Discord to verify your identity.";
@@ -3747,6 +3809,7 @@
         loginButton.disabled = false;
         loginButton.textContent = "Login with Discord";
         logoutButton.hidden = true;
+        message.textContent = "";
       }
     }
 
@@ -3769,6 +3832,8 @@
     });
 
     logoutButton.addEventListener("click", async () => {
+      ++updateCounter;
+
       const { error } = await client.auth.signOut();
 
       if (error) {
@@ -3780,7 +3845,10 @@
     });
 
     client.auth.onAuthStateChange(() => {
-      updateLoginState();
+      // Run after Supabase finishes updating its session.
+      setTimeout(() => {
+        updateLoginState();
+      }, 0);
     });
 
     await updateLoginState();
