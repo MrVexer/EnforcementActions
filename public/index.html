@@ -12477,6 +12477,124 @@ renderStaffAdministration = function () {
     pcmRefresh();
 };
    
+ // ==========================================
+ // SHARED PLAYER DATABASE - PAGE DISPLAY
+ // ==========================================
+
+const renderBeforeSharedPlayers = render;
+
+render = function () {
+    if (page !== "players") {
+        return renderBeforeSharedPlayers();
+    }
+
+    nav();
+
+    document.getElementById("title").textContent =
+        "Player Database";
+
+    document.getElementById("crumb").textContent =
+        "Player Database";
+
+    document.getElementById("subtitle").textContent =
+        "Shared player records";
+
+    // Creating and editing will be connected securely later.
+    document.getElementById("add").style.display = "none";
+
+    const content = document.getElementById("content");
+
+    content.innerHTML =
+        '<div class="panel">Loading shared player records...</div>';
+
+    loadSharedPlayers()
+        .then(players => {
+            // Do not overwrite another page if staff navigated away.
+            if (page !== "players") return;
+
+            content.replaceChildren();
+
+            const panel = document.createElement("div");
+            panel.className = "panel";
+
+            const heading = document.createElement("h2");
+            heading.textContent =
+                "Shared Players (" + players.length + ")";
+
+            panel.appendChild(heading);
+
+            const wrapper = document.createElement("div");
+            wrapper.className = "tablewrap";
+
+            const tableElement = document.createElement("table");
+
+            const thead = document.createElement("thead");
+            const headerRow = document.createElement("tr");
+
+            for (const label of [
+                "Player Name",
+                "Discord ID",
+                "Characters",
+                "Notes"
+            ]) {
+                const th = document.createElement("th");
+                th.textContent = label;
+                headerRow.appendChild(th);
+            }
+
+            thead.appendChild(headerRow);
+            tableElement.appendChild(thead);
+
+            const tbody = document.createElement("tbody");
+
+            for (const player of players) {
+                const tr = document.createElement("tr");
+
+                for (const value of [
+                    player.name,
+                    player.discord,
+                    player.characters,
+                    player.notes
+                ]) {
+                    const td = document.createElement("td");
+                    td.textContent = String(value ?? "");
+                    tr.appendChild(td);
+                }
+
+                tbody.appendChild(tr);
+            }
+
+            if (players.length === 0) {
+                const tr = document.createElement("tr");
+                const td = document.createElement("td");
+
+                td.colSpan = 4;
+                td.className = "empty";
+                td.textContent = "No shared players found.";
+
+                tr.appendChild(td);
+                tbody.appendChild(tr);
+            }
+
+            tableElement.appendChild(tbody);
+            wrapper.appendChild(tableElement);
+            panel.appendChild(wrapper);
+            content.appendChild(panel);
+        })
+        .catch(error => {
+            if (page !== "players") return;
+
+            content.replaceChildren();
+
+            const message = document.createElement("div");
+            message.className = "notice";
+            message.textContent =
+                "Unable to load shared players: " + error.message;
+
+            content.appendChild(message);
+        });
+};
+
 // Render the workspace.
 render();
 
