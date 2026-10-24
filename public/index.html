@@ -13352,6 +13352,205 @@ render=function(){
 };
 render();
 
+
+// ==========================================
+// SECTION 4 — SHARED BAN APPEALS
+// ==========================================
+let sharedAppealSearch="", sharedAppealStatus="All", sharedAppealVersion=0;
+const appealFields=[
+  ["player","Player","player",64],
+  ["punishment","Ban Being Appealed","punishment",64],
+  ["submittedAt","Submission Date","date",10],
+  ["appellant","Appellant / Contact","text",120],
+  ["statement","Appeal Statement","textarea",8000],
+  ["status","Status","select:Pending|Under Review|Approved|Denied",30],
+  ["reviewNotes","Internal Review Notes","textarea",8000],
+  ["decisionReason","Decision Reason","textarea",8000]
+];
+function sharedAppealRole(level){
+  const roles=window.vrStaffPermissions?.roles;
+  if(window.vrStaffPermissions?.authorized!==true || !Array.isArray(roles))return false;
+  const managers=["operations_manager","head_of_enforcement"];
+  return roles.some(role=>(level==="delete"?managers:[...managers,"enforcement_captain"]).includes(role));
+}
+async function openSharedAppealForm(record=null){
+  if(page!=="appeals" || !sharedAppealRole("edit"))return;
+  const editing=Boolean(record), modal=document.getElementById("modalback"), body=document.getElementById("modalBody");
+  document.getElementById("modalTitle").textContent=editing?"Review Ban Appeal":"Register Ban Appeal";
+  body.replaceChildren();const loading=document.createElement("p");loading.textContent="Loading players and bans...";
+  body.appendChild(loading);modal.classList.add("show");
+  let players,bans;
+  try{
+    const [playerData,result]=await Promise.all([loadSharedPlayers(),sharedPlayerRequest("/api/punishments","GET")]);
+    players=playerData;
+    bans=(result.punishments||[]).map(item=>({...item.record,id:item.id}))
+      .filter(item=>["Temporary Ban","Permanent Ban"].includes(item.action));
+  }catch(error){loading.textContent="Unable to load records: "+error.message;return;}
+  if(page!=="appeals" || !modal.classList.contains("show"))return;
+  body.replaceChildren();const form=document.createElement("form");form.className="formgrid";
+  const controls={}, playerNames=new Map(players.map(item=>[item.id,item.name]));
+  for(const [key,label,type,max] of appealFields){
+    const field=document.createElement("div");field.className="field"+(type==="textarea"?" full":"");
+    const caption=document.createElement("label");caption.textContent=label;
+    let control;
+    if(type==="textarea"){
+      control=document.createElement("textarea");control.rows=3;
+    }else if(type==="player"||type==="punishment"||type.startsWith("select:")){
+      control=document.createElement("select");
+      if(type==="player"||type==="punishment"){
+        const blank=document.createElement("option");blank.value="";
+        blank.textContent=type==="player"?"Choose a player":"Choose a ban";control.appendChild(blank);
+        for(const item of type==="player"?players:bans){
+          const option=document.createElement("option");option.value=item.id;
+          option.textContent=type==="player"?item.name+" ("+(item.discord||item.id)+")":
+            item.action+" — "+(playerNames.get(item.player)||item.player)+" ("+item.id.slice(0,8)+")";
+          if(type==="punishment")option.dataset.player=item.player;
+          control.appendChild(option);
+        }
+      }else{
+        for(const value of type.slice(7).split("|")){
+          const option=document.createElement("option");option.value=value;option.textContent=value;control.appendChild(option);
+        }
+      }
+    }else{control=document.createElement("input");control.type=type;}
+    control.maxLength=max;
+    control.value=String(record?.[key]??(key==="submittedAt"?new Date().toISOString().slice(0,10):key==="status"?"Pending":""));
+    control.required=["player","punishment","submittedAt","statement","status"].includes(key);
+    if(editing && ["player","punishment"].includes(key))control.disabled=true;
+    caption.appendChild(control);field.appendChild(caption);form.appendChild(field);controls[key]=control;
+  }
+  function updateBanChoices(){
+    for(const option of controls.punishment.options){if(option.value)option.hidden=option.dataset.player!==controls.player.value;}
+    if(controls.punishment.selectedOptions[0]?.hidden)controls.punishment.value="";
+  }
+  controls.player.onchange=updateBanChoices;updateBanChoices();
+  if(!editing){
+    controls.status.value="Pending";controls.status.disabled=true;
+    controls.decisionReason.disabled=true;
+  }
+  if(editing && ["Approved","Denied"].includes(record.status)){
+    controls.status.disabled=true;controls.decisionReason.disabled=true;
+  }
+  const notice=document.createElement("div");notice.className="notice";notice.style.cssText="display:none;grid-column:1 / -1";
+  notice.setAttribute("role","alert");form.appendChild(notice);
+  const actions=document.createElement("div");actions.className="actions";actions.style.gridColumn="1 / -1";
+  const cancel=document.createElement("button");cancel.type="button";cancel.className="secondary";
+  cancel.textContent="Cancel";cancel.onclick=()=>close();
+  const submit=document.createElement("button");submit.type="submit";submit.className="primary";
+  submit.textContent=editing?"Save Appeal":"Register Appeal";actions.append(cancel,submit);
+  if(editing && sharedAppealRole("delete")){
+    const remove=document.createElement("button");remove.type="button";remove.className="secondary";
+    remove.textContent="Delete Appeal";remove.style.marginRight="auto";
+    remove.onclick=async()=>{
+      if(!confirm("Permanently delete this appeal? Its audit history will remain."))return;
+      remove.disabled=true;submit.disabled=true;
+      try{await sharedPlayerRequest("/api/appeals/"+encodeURIComponent(record.id),"DELETE",{expectedUpdatedAt:record.updated_at});
+        close();if(page==="appeals")render();}
+      catch(error){notice.textContent=error.message;notice.style.display="";remove.disabled=false;submit.disabled=false;}
+    };actions.prepend(remove);
+  }
+  form.appendChild(actions);
+  form.onsubmit=async event=>{
+    event.preventDefault();
+    const fields=Object.fromEntries(Object.entries(controls).map(([key,control])=>[key,control.value.trim()]));
+    if(editing){fields.player=record.player;fields.punishment=record.punishment;
+      if(["Approved","Denied"].includes(record.status)){
+        fields.status=record.status;fields.decisionReason=record.decisionReason||"";
+      }
+    }else{fields.status="Pending";fields.decisionReason="";}
+    if(["Approved","Denied"].includes(fields.status)&&!fields.decisionReason){
+      notice.textContent="A decision reason is required.";notice.style.display="";return;
+    }
+    submit.disabled=true;cancel.disabled=true;notice.style.display="none";
+    try{await sharedPlayerRequest(editing?"/api/appeals/"+encodeURIComponent(record.id):"/api/appeals",
+      editing?"PUT":"POST",editing?{...fields,expectedUpdatedAt:record.updated_at}:fields);
+      close();if(page==="appeals")render();
+    }catch(error){notice.textContent=error.message;notice.style.display="";}
+    finally{submit.disabled=false;cancel.disabled=false;}
+  };
+  body.appendChild(form);
+}
+const renderBeforeSharedAppeals=render;
+render=function(){
+  if(page!=="appeals")return renderBeforeSharedAppeals();
+  const version=++sharedAppealVersion;
+  document.getElementById("title").textContent="Ban Appeals";
+  document.getElementById("subtitle").textContent="Shared appeal reviews with independent decisions and audit history";
+  const add=document.getElementById("add");add.textContent="Register Appeal";
+  add.style.display=sharedAppealRole("edit")?"":"none";add.onclick=()=>openSharedAppealForm();
+  const content=document.getElementById("content");content.replaceChildren();
+  const loading=document.createElement("div");loading.className="panel";
+  loading.textContent="Loading shared ban appeals...";content.appendChild(loading);
+  Promise.all([sharedPlayerRequest("/api/appeals","GET"),loadSharedPlayers(),sharedPlayerRequest("/api/punishments","GET")])
+  .then(([result,players,punishmentResult])=>{
+    if(page!=="appeals"||version!==sharedAppealVersion||!document.body.classList.contains("vr-workspace-authorized"))return;
+    const appeals=(result.appeals||[]).map(item=>({...item.record,id:item.id,updated_at:item.updated_at}));
+    const playerNames=new Map(players.map(item=>[item.id,item.name]));
+    const banNames=new Map((punishmentResult.punishments||[]).map(item=>[item.id,item.record?.action||item.id]));
+    content.replaceChildren();const toolbar=document.createElement("div");toolbar.className="toolbar";
+    const search=document.createElement("input");search.className="search";search.type="search";
+    search.placeholder="Search players, appeal statements or decisions...";search.value=sharedAppealSearch;
+    const status=document.createElement("select");
+    for(const value of ["All","Pending","Under Review","Approved","Denied"]){
+      const option=document.createElement("option");option.value=value;option.textContent=value;status.appendChild(option);
+    }status.value=sharedAppealStatus;
+    const refresh=document.createElement("button");refresh.className="secondary";refresh.textContent="Refresh";refresh.onclick=()=>render();
+    toolbar.append(search,status,refresh);content.appendChild(toolbar);
+    const panel=document.createElement("div");panel.className="panel";
+    const heading=document.createElement("h2");panel.appendChild(heading);
+    const wrapper=document.createElement("div");wrapper.className="tablewrap";
+    const table=document.createElement("table"),thead=document.createElement("thead"),headRow=document.createElement("tr");
+    const columns=["Player","Ban","Status","Submitted","Appellant","Decision / Reviewer"];
+    if(sharedAppealRole("edit"))columns.push("Actions");
+    for(const name of columns){const th=document.createElement("th");th.textContent=name;headRow.appendChild(th);}
+    thead.appendChild(headRow);const tbody=document.createElement("tbody");table.append(thead,tbody);
+    wrapper.appendChild(table);panel.appendChild(wrapper);content.appendChild(panel);
+    function showDetails(item){
+      const details=document.createElement("div");details.className="record";
+      for(const [key,label] of appealFields){
+        const caption=document.createElement("strong");caption.textContent=label;
+        const value=document.createElement("p");value.textContent=key==="player"?(playerNames.get(item.player)||item.player):
+          key==="punishment"?(banNames.get(item.punishment)||item.punishment):String(item[key]??"");
+        details.append(caption,value);
+      }
+      const reviewer=document.createElement("p");reviewer.textContent="Decided by: "+(item.decidedByUsername||"Not yet decided");details.appendChild(reviewer);
+      document.getElementById("modalTitle").textContent="Appeal Details";
+      document.getElementById("modalBody").replaceChildren(details);
+      document.getElementById("modalback").classList.add("show");
+    }
+    function updateRows(){
+      tbody.replaceChildren();const term=sharedAppealSearch.trim().toLowerCase();
+      const visible=appeals.filter(item=>(sharedAppealStatus==="All"||item.status===sharedAppealStatus)&&
+        [item.id,playerNames.get(item.player),banNames.get(item.punishment),item.appellant,item.statement,
+          item.status,item.decisionReason,item.decidedByUsername].some(value=>String(value??"").toLowerCase().includes(term)));
+      heading.textContent=`Shared Ban Appeals (${visible.length} of ${appeals.length})`;
+      for(const item of visible){
+        const tr=document.createElement("tr");
+        for(const value of [playerNames.get(item.player)||"Unknown player",banNames.get(item.punishment)||"Unknown ban",
+          item.status,item.submittedAt,item.appellant||"—",item.decidedByUsername||"—"]){
+          const td=document.createElement("td");td.textContent=String(value);tr.appendChild(td);
+        }
+        if(sharedAppealRole("edit")){
+          const td=document.createElement("td"),button=document.createElement("button");
+          button.className="secondary";button.textContent="Review";button.onclick=()=>openSharedAppealForm(item);
+          td.appendChild(button);tr.appendChild(td);
+        }else{tr.style.cursor="pointer";tr.onclick=()=>showDetails(item);}
+        tbody.appendChild(tr);
+      }
+      if(!visible.length){const tr=document.createElement("tr"),td=document.createElement("td");
+        td.colSpan=columns.length;td.className="empty";
+        td.textContent=appeals.length?"No matching appeals.":"No shared appeals yet.";tr.appendChild(td);tbody.appendChild(tr);}
+    }
+    search.oninput=()=>{sharedAppealSearch=search.value;updateRows();};
+    status.onchange=()=>{sharedAppealStatus=status.value;updateRows();};updateRows();
+  }).catch(error=>{
+    if(page!=="appeals"||version!==sharedAppealVersion)return;
+    content.replaceChildren();const notice=document.createElement("div");notice.className="notice";
+    notice.textContent="Unable to load shared appeals: "+error.message;content.appendChild(notice);
+  });
+};
+render();
+
   </script>
  </body>
 </html>
