@@ -13101,6 +13101,257 @@ render=function(){
 // Render the workspace.
 render();
 
+// ==========================================
+// SECTION 3 — LIVE PUNISHMENT MANAGEMENT
+// ==========================================
+let sharedPunishmentSearch="";
+let sharedPunishmentStatus="All";
+let sharedPunishmentVersion=0;
+const punishmentFields=[
+    ["player","Player","player",64],
+    ["infraction","Linked Infraction (optional)","infraction",64],
+    ["action","Punishment","select:Verbal Warning|Written Warning|Kick|Temporary Ban|Permanent Ban",30],
+    ["duration","Duration / Details","text",150],
+    ["expiresAt","Expiry Date (temporary bans)","date",10],
+    ["status","Status","select:Active|Expired|Revoked",20],
+    ["officer","Issuing Officer","text",120],
+    ["date","Issue Date","date",10],
+    ["notes","Reason / Notes","textarea",8000]
+];
+const punishmentDefaults={status:"Active",date:new Date().toISOString().slice(0,10),action:"Written Warning"};
+function sharedPunishmentRole(level){
+    const roles=window.vrStaffPermissions?.roles;
+    if(window.vrStaffPermissions?.authorized!==true || !Array.isArray(roles))return false;
+    const managers=["operations_manager","head_of_enforcement"];
+    if(level==="delete")return roles.some(role=>managers.includes(role));
+    return roles.some(role=>[...managers,"enforcement_captain","enforcement_officer"].includes(role));
+}
+async function openSharedPunishmentForm(record=null){
+    if(page!=="punishments" || !sharedPunishmentRole("edit"))return;
+    const editing=Boolean(record);
+    const modal=document.getElementById("modalback");
+    const body=document.getElementById("modalBody");
+    document.getElementById("modalTitle").textContent=editing?"Edit Punishment":"Issue Punishment";
+    body.replaceChildren();
+    const loading=document.createElement("p");loading.textContent="Loading shared records...";
+    body.appendChild(loading);modal.classList.add("show");
+    let players,infractions;
+    try{
+        const result=await Promise.all([loadSharedPlayers(),sharedPlayerRequest("/api/infractions","GET")]);
+        players=result[0];infractions=(result[1].infractions||[]).map(item=>({...item.record,id:item.id}));
+    }catch(error){loading.textContent="Unable to load shared records: "+error.message;return;}
+    if(page!=="punishments" || !modal.classList.contains("show"))return;
+    body.replaceChildren();
+    const form=document.createElement("form");form.className="formgrid";
+    const controls={};
+    const playerNames=new Map(players.map(player=>[player.id,player.name]));
+    for(const [key,label,type,max] of punishmentFields){
+        const field=document.createElement("div");field.className="field"+(type==="textarea"?" full":"");
+        const caption=document.createElement("label");caption.textContent=label;
+        let control;
+        if(type==="textarea"){
+            control=document.createElement("textarea");control.rows=3;
+        }else if(["player","infraction"].includes(type) || type.startsWith("select:")){
+            control=document.createElement("select");
+            if(type==="player" || type==="infraction"){
+                const blank=document.createElement("option");blank.value="";
+                blank.textContent=type==="player"?"Choose a player":"No linked infraction";
+                control.appendChild(blank);
+                const choices=type==="player"?players:infractions;
+                for(const item of choices){
+                    const option=document.createElement("option");option.value=item.id;
+                    option.textContent=type==="player"?item.name+" ("+(item.discord||item.id)+")":
+                        item.type+" — "+(playerNames.get(item.player)||item.player)+" ("+item.id.slice(0,8)+")";
+                    if(type==="infraction")option.dataset.player=item.player;
+                    control.appendChild(option);
+                }
+            }else{
+                for(const value of type.slice(7).split("|")){
+                    const option=document.createElement("option");option.value=value;option.textContent=value;
+                    control.appendChild(option);
+                }
+            }
+        }else{
+            control=document.createElement("input");control.type=type;
+        }
+        control.maxLength=max;
+        control.value=String(record?.[key]??punishmentDefaults[key]??"");
+        control.required=["player","action","status","date","notes"].includes(key);
+        caption.appendChild(control);field.appendChild(caption);form.appendChild(field);
+        controls[key]=control;
+    }
+    function updateInfractionChoices(){
+        for(const option of controls.infraction.options){
+            if(option.value)option.hidden=option.dataset.player!==controls.player.value;
+        }
+        const selected=controls.infraction.selectedOptions[0];
+        if(selected?.hidden)controls.infraction.value="";
+    }
+    controls.player.onchange=updateInfractionChoices;
+    updateInfractionChoices();
+    function updateExpiry(){
+        const temporary=controls.action.value==="Temporary Ban";
+        controls.expiresAt.disabled=!temporary;
+        controls.expiresAt.required=temporary;
+        if(!temporary)controls.expiresAt.value="";
+    }
+    controls.action.onchange=updateExpiry;
+    updateExpiry();
+    const notice=document.createElement("div");notice.className="notice";
+    notice.style.cssText="display:none;grid-column:1 / -1";notice.setAttribute("role","alert");
+    form.appendChild(notice);
+    const actions=document.createElement("div");actions.className="actions";
+    actions.style.gridColumn="1 / -1";
+    const cancel=document.createElement("button");cancel.type="button";
+    cancel.className="secondary";cancel.textContent="Cancel";cancel.onclick=()=>close();
+    const submit=document.createElement("button");submit.type="submit";
+    submit.className="primary";submit.textContent=editing?"Save Changes":"Issue Punishment";
+    actions.append(cancel,submit);
+    if(editing && sharedPunishmentRole("delete")){
+        const remove=document.createElement("button");remove.type="button";
+        remove.className="secondary";remove.textContent="Delete Punishment";
+        remove.style.marginRight="auto";
+        remove.onclick=async()=>{
+            if(!confirm("Permanently delete this punishment? The audit entry remains."))return;
+            remove.disabled=true;submit.disabled=true;
+            try{
+                await sharedPlayerRequest("/api/punishments/"+encodeURIComponent(record.id),"DELETE",{
+                    expectedUpdatedAt:record.updated_at
+                });
+                close();if(page==="punishments")render();
+            }catch(error){notice.textContent=error.message;notice.style.display="";remove.disabled=false;submit.disabled=false;}
+        };
+        actions.prepend(remove);
+    }
+    form.appendChild(actions);
+    form.onsubmit=async event=>{
+        event.preventDefault();
+        if(!sharedPunishmentRole("edit"))return;
+        const fields=Object.fromEntries(Object.entries(controls).map(([key,control])=>[key,control.value.trim()]));
+        if(fields.action==="Temporary Ban" && fields.expiresAt<=fields.date){
+            notice.textContent="Expiry date must be after the issue date.";notice.style.display="";return;
+        }
+        const payload=editing?{...fields,expectedUpdatedAt:record.updated_at}:fields;
+        submit.disabled=true;cancel.disabled=true;notice.style.display="none";
+        try{
+            await sharedPlayerRequest(editing?"/api/punishments/"+encodeURIComponent(record.id):"/api/punishments",
+                editing?"PUT":"POST",payload);
+            close();if(page==="punishments")render();
+        }catch(error){notice.textContent=error.message;notice.style.display="";}
+        finally{submit.disabled=false;cancel.disabled=false;}
+    };
+    body.appendChild(form);
+}
+const renderBeforeSharedPunishments=render;
+render=function(){
+    const version=++sharedPunishmentVersion;
+    if(page!=="punishments")return renderBeforeSharedPunishments();
+    nav();
+    document.getElementById("title").textContent="Punishments";
+    document.getElementById("crumb").textContent="Punishments";
+    document.getElementById("subtitle").textContent="Shared warnings, kicks and bans";
+    const add=document.getElementById("add");
+    add.style.display=sharedPunishmentRole("edit")?"":"none";
+    add.textContent="Issue Punishment";
+    add.onclick=()=>openSharedPunishmentForm();
+    const content=document.getElementById("content");content.replaceChildren();
+    const loading=document.createElement("div");loading.className="panel";
+    loading.textContent="Loading shared punishments...";content.appendChild(loading);
+    Promise.all([sharedPlayerRequest("/api/punishments","GET"),loadSharedPlayers(),
+        sharedPlayerRequest("/api/infractions","GET")]).then(([result,players,caseResult])=>{
+        if(page!=="punishments" || version!==sharedPunishmentVersion ||
+            !document.body.classList.contains("vr-workspace-authorized"))return;
+        const punishments=(result.punishments||[]).map(item=>({...item.record,id:item.id,updated_at:item.updated_at}));
+        const playerNames=new Map(players.map(item=>[item.id,item.name]));
+        const caseNames=new Map((caseResult.infractions||[]).map(item=>[item.id,item.record?.type||item.id]));
+        content.replaceChildren();
+        const toolbar=document.createElement("div");toolbar.className="toolbar";
+        const search=document.createElement("input");search.className="search";search.type="search";
+        search.placeholder="Search players, actions, officers or reasons...";
+        search.value=sharedPunishmentSearch;
+        const status=document.createElement("select");
+        for(const value of ["All","Active","Expired","Revoked"]){
+            const option=document.createElement("option");option.value=value;option.textContent=value;
+            status.appendChild(option);
+        }
+        status.value=sharedPunishmentStatus;
+        const refresh=document.createElement("button");refresh.className="secondary";
+        refresh.textContent="Refresh";refresh.onclick=()=>render();
+        toolbar.append(search,status,refresh);content.appendChild(toolbar);
+        const panel=document.createElement("div");panel.className="panel";
+        const heading=document.createElement("h2");panel.appendChild(heading);
+        const wrapper=document.createElement("div");wrapper.className="tablewrap";
+        const table=document.createElement("table");const thead=document.createElement("thead");
+        const headRow=document.createElement("tr");
+        const columns=["Player","Action","Linked Infraction","Status","Issued","Expires","Officer"];
+        if(sharedPunishmentRole("edit"))columns.push("Actions");
+        for(const name of columns){const th=document.createElement("th");th.textContent=name;headRow.appendChild(th);}
+        thead.appendChild(headRow);const tbody=document.createElement("tbody");
+        table.append(thead,tbody);wrapper.appendChild(table);panel.appendChild(wrapper);content.appendChild(panel);
+        function updateRows(){
+            tbody.replaceChildren();const term=sharedPunishmentSearch.trim().toLowerCase();
+            const visible=punishments.filter(item=>(sharedPunishmentStatus==="All"||item.status===sharedPunishmentStatus) &&
+                [item.id,playerNames.get(item.player),item.action,item.status,item.officer,item.notes,
+                    caseNames.get(item.infraction)].some(value=>String(value??"").toLowerCase().includes(term)));
+            heading.textContent=`Shared Punishments (${visible.length} of ${punishments.length})`;
+            for(const item of visible){
+                const tr=document.createElement("tr");
+                const values=[playerNames.get(item.player)||"Unknown player",item.action,
+                    item.infraction?(caseNames.get(item.infraction)||item.infraction):"—",
+                    item.status,item.date,item.expiresAt||"—",item.officer];
+                for(const value of values){const td=document.createElement("td");td.textContent=String(value??"");tr.appendChild(td);}
+                if(sharedPunishmentRole("edit")){
+                    const td=document.createElement("td");const button=document.createElement("button");
+                    button.className="secondary";button.textContent="Edit";
+                    button.onclick=()=>openSharedPunishmentForm(item);
+                    td.appendChild(button);tr.appendChild(td);
+                }else{
+                    tr.style.cursor="pointer";
+                    tr.onclick=()=>{
+                        const details=document.createElement("div");details.className="record";
+                        for(const [key,label] of punishmentFields.map(([key,label])=>[key,label])){
+                            const caption=document.createElement("strong");caption.textContent=label;
+                            const value=document.createElement("p");
+                            value.textContent=key==="player"?(playerNames.get(item.player)||item.player):
+                                key==="infraction"?(caseNames.get(item.infraction)||item.infraction||"None"):
+                                String(item[key]??"");
+                            details.append(caption,value);
+                        }
+                        document.getElementById("modalTitle").textContent="Punishment Details";
+                        document.getElementById("modalBody").replaceChildren(details);
+                        document.getElementById("modalback").classList.add("show");
+                    };
+                }
+                tbody.appendChild(tr);
+            }
+            if(!visible.length){const tr=document.createElement("tr");const td=document.createElement("td");
+                td.colSpan=columns.length;td.className="empty";
+                td.textContent=punishments.length?"No matching punishments.":"No shared punishments yet.";
+                tr.appendChild(td);tbody.appendChild(tr);}
+        }
+        search.oninput=()=>{sharedPunishmentSearch=search.value;updateRows();};
+        status.onchange=()=>{sharedPunishmentStatus=status.value;updateRows();};
+        updateRows();
+    }).catch(error=>{
+        if(page!=="punishments" || version!==sharedPunishmentVersion)return;
+        content.replaceChildren();const notice=document.createElement("div");notice.className="notice";
+        notice.textContent="Unable to load shared punishments: "+error.message;content.appendChild(notice);
+    });
+};
+const renderWithPunishmentButton=render;
+render=function(){
+    const result=renderWithPunishmentButton();
+    if(page!=="punishments" && page!=="infractions"){
+        const add=document.getElementById("add");
+        if(page==="players"){
+            add.textContent="Create Player";
+            add.onclick=()=>openSharedPlayerForm();
+        }
+    }
+    return result;
+};
+render();
+
   </script>
  </body>
 </html>
