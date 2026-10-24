@@ -893,7 +893,7 @@ if (
         if (!fields.date) return json({error:"Issue date is required"},400);
         let record;
         if (collection) {
-          record={id,...fields,createdAt:new Date().toISOString()};
+          record={id,...fields,issuedByDiscordId:staff.discordId,createdAt:new Date().toISOString()};
         } else {
           const response=await fetch(`${SUPABASE_URL}/rest/v1/vr_punishments?id=eq.${encodeURIComponent(id)}&select=id,record&limit=1`,{headers,cache:"no-store"});
           if (!response.ok) return json({error:"Unable to load punishment"},503);
@@ -907,6 +907,89 @@ if (
       } catch(error) {
         console.error("Punishment API failure",error);
         return json({error:"Punishment service unavailable"},503);
+      }
+    }
+
+    // Section 4: shared ban appeals. Decision permissions are enforced server-side.
+    if (url.pathname === "/api/appeals" || url.pathname.startsWith("/api/appeals/")) {
+      const collection=url.pathname==="/api/appeals";
+      if (!(collection?["GET","POST"]:["PUT","DELETE"]).includes(request.method))
+        return json({error:"Method not allowed"},405);
+      try {
+        const verified=await verifyStaff(request,env);
+        if (!verified.ok) return verified;
+        const staff=await verified.json();
+        const roles=staff.roles||[];
+        const managers=["operations_manager","head_of_enforcement"];
+        const reviewers=[...managers,"enforcement_captain"];
+        const readers=[...reviewers,"enforcement_officer","trial_enforcement","support_team"];
+        const permitted=request.method==="GET"?readers:request.method==="DELETE"?managers:reviewers;
+        if (!staff.authorized || !roles.some(role=>permitted.includes(role)))
+          return json({error:"Insufficient permissions"},403);
+        if (!env.SUPABASE_SECRET_KEY) return json({error:"Database unavailable"},503);
+        const headers={apikey:env.SUPABASE_SECRET_KEY,"Content-Type":"application/json",Accept:"application/json"};
+        if (request.method==="GET") {
+          const response=await fetch(`${SUPABASE_URL}/rest/v1/vr_appeals?select=id,record,updated_at&order=updated_at.desc&limit=200`,{headers,cache:"no-store"});
+          if (!response.ok) return json({error:"Unable to load appeals"},503);
+          return json({success:true,appeals:await response.json()});
+        }
+        const id=collection?crypto.randomUUID():decodeURIComponent(url.pathname.slice("/api/appeals/".length));
+        if (!/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i.test(id)) return json({error:"Invalid appeal ID"},400);
+        const raw=await request.text();
+        if (new TextEncoder().encode(raw).length>32768) return json({error:"Request too large"},413);
+        let input;
+        try {input=JSON.parse(raw)} catch {return json({error:"Invalid JSON"},400)}
+        if (!input || typeof input!=="object" || Array.isArray(input)) return json({error:"Invalid appeal payload"},400);
+        const expected=input.expectedUpdatedAt;
+        if (!collection && (typeof expected!=="string" || !/^\d{4}-\d{2}-\d{2}T/.test(expected) || !Number.isFinite(Date.parse(expected))))
+          return json({error:"Invalid record version"},400);
+        const rpcError=async response=>{
+          const detail=await response.json().catch(()=>({}));
+          if (detail.code==="P0001") return json({error:"This appeal changed. Refresh before editing."},409);
+          if (["P0002","P0003"].includes(detail.code)) return json({error:detail.message||"Appeal validation failed"},409);
+          console.error("Appeal RPC failed",response.status,detail.code);
+          return json({error:"Appeal database operation failed"},503);
+        };
+        const rpc=async(name,params)=>{
+          const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`,{method:"POST",headers,body:JSON.stringify(params),cache:"no-store"});
+          return response.ok?json(await response.json(),request.method==="POST"?201:200):rpcError(response);
+        };
+        const actor={p_actor_discord_id:staff.discordId,p_actor_username:staff.username};
+        if (request.method==="DELETE") return rpc("vr_delete_appeal",{p_id:id,...actor,p_expected_updated_at:expected});
+        const limits={player:64,punishment:64,submittedAt:10,appellant:120,statement:8000,
+          status:30,reviewNotes:8000,decisionReason:8000};
+        const fields={};
+        for (const [key,max] of Object.entries(limits)) {
+          if (typeof input[key]!=="string") return json({error:`Invalid ${key}`},400);
+          fields[key]=input[key].trim();
+          if (fields[key].length>max) return json({error:`Field too long: ${key}`},400);
+        }
+        const uuid=/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i;
+        if (!uuid.test(fields.player) || !uuid.test(fields.punishment))
+          return json({error:"Choose a player and their linked ban"},400);
+        if (!fields.statement) return json({error:"Appeal statement is required"},400);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(fields.submittedAt)) return json({error:"Invalid submission date"},400);
+        if (!["Pending","Under Review","Approved","Denied"].includes(fields.status))
+          return json({error:"Invalid appeal status"},400);
+        if (collection && fields.status!=="Pending") return json({error:"New appeals must begin as Pending"},400);
+        if (["Approved","Denied"].includes(fields.status) && !fields.decisionReason)
+          return json({error:"Decision reason is required"},400);
+        let record;
+        if (collection) {
+          record={id,...fields,createdAt:new Date().toISOString()};
+        } else {
+          const response=await fetch(`${SUPABASE_URL}/rest/v1/vr_appeals?id=eq.${encodeURIComponent(id)}&select=id,record&limit=1`,{headers,cache:"no-store"});
+          if (!response.ok) return json({error:"Unable to load appeal"},503);
+          const rows=await response.json();
+          if (!rows.length) return json({error:"Appeal not found"},404);
+          record={...rows[0].record,id,...fields};
+        }
+        return rpc(collection?"vr_create_appeal":"vr_update_appeal",{
+          p_id:id,p_record:record,...actor,...(collection?{}:{p_expected_updated_at:expected})
+        });
+      } catch(error) {
+        console.error("Appeal API failure",error);
+        return json({error:"Appeal service unavailable"},503);
       }
     }
 
