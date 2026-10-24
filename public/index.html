@@ -13848,6 +13848,149 @@ const section6PreviousRender=render;
 render=function(){if(page==="tasks")return section6Render();return section6PreviousRender()};
 render();
 
+
+// SECTION 7 — SHARED DOCUMENTS & POLICIES
+let section7Version=0,section7Search="",section7Category="All",section7Status="Published";
+const section7Editors=["operations_manager","head_of_enforcement","enforcement_captain"];
+const section7Managers=["operations_manager","head_of_enforcement"];
+function section7CanView(){return section6Roles().some(r=>[...section7Editors,"enforcement_officer","trial_enforcement","support_team"].includes(r))}
+function section7CanEdit(){return section6Roles().some(r=>section7Editors.includes(r))}
+function section7CanArchive(){return section6Roles().some(r=>section7Managers.includes(r))}
+function section7Element(tag,text,cls){return section6Node(tag,text,cls)}
+function section7ShowForm(doc){
+ if(!section7CanEdit()||(doc?.status==="Archived"&&!section7CanArchive()))return;
+ const body=document.getElementById("modalBody");body.replaceChildren();
+ document.getElementById("modalTitle").textContent=doc?"Edit Staff Document":"Create Staff Document";
+ const form=document.createElement("form"),grid=section7Element("div",undefined,"formgrid"),inputs={};
+ const fields=[
+  ["title","Document title","text",doc?.title||""],
+  ["category","Category","text",doc?.category||"Procedures"],
+  ["description","Summary","textarea",doc?.description||""],
+  ["content","Document content (plain text)","textarea",doc?.content||""],
+  ["url","External document URL (optional)","url",doc?.url||""],
+  ["status","Publication status","select",doc?.status||"Draft"]
+ ];
+ for(const [key,label,type,value] of fields){
+  const field=section7Element("label",undefined,"field");field.appendChild(section7Element("span",label));
+  let input;
+  if(type==="textarea")input=document.createElement("textarea");
+  else if(type==="select"){
+   input=document.createElement("select");
+   for(const status of ["Draft","Published",...(section7CanArchive()?["Archived"]:[])]){
+    const option=document.createElement("option");option.value=status;option.textContent=status;input.appendChild(option);
+   }
+  }else{input=document.createElement("input");input.type=type}
+  input.value=value;input.name=key;input.required=key==="title";
+  if(key==="content")input.rows=10;
+  inputs[key]=input;field.appendChild(input);grid.appendChild(field);
+ }
+ const message=section7Element("p","");message.style.color="#ef4444";message.hidden=true;
+ const actions=section7Element("div",undefined,"actions");
+ const cancel=section7Element("button","Cancel","secondary");cancel.type="button";cancel.onclick=()=>close();
+ const submit=section7Element("button",doc?"Save Revision":"Create Document","primary");submit.type="submit";
+ actions.append(cancel,submit);form.append(grid,message,actions);body.appendChild(form);
+ document.getElementById("modalback").classList.add("show");
+ form.onsubmit=async e=>{
+  e.preventDefault();message.hidden=true;
+  const payload={};for(const [key] of fields)payload[key]=inputs[key].value.trim();
+  if(doc)payload.expectedUpdatedAt=doc.updated_at;
+  submit.disabled=true;cancel.disabled=true;
+  try{
+   await sharedPlayerRequest(doc?"/api/documents/"+encodeURIComponent(doc.id):"/api/documents",doc?"PUT":"POST",payload);
+   close();if(page==="docs")render();
+  }catch(error){message.textContent=error.message;message.hidden=false}
+  finally{submit.disabled=false;cancel.disabled=false}
+ };
+}
+function section7Read(doc){
+ const body=document.getElementById("modalBody");body.replaceChildren();
+ document.getElementById("modalTitle").textContent=doc.title;
+ body.appendChild(section7Element("p",`${doc.category} · ${doc.status} · Revision ${doc.revision||1}`));
+ if(doc.description)body.appendChild(section7Element("p",doc.description));
+ if(doc.content){const content=section7Element("pre",doc.content);content.style.whiteSpace="pre-wrap";content.style.overflowWrap="anywhere";content.style.maxHeight="55vh";content.style.overflow="auto";body.appendChild(content)}
+ if(doc.url){const link=document.createElement("a");link.href=doc.url;link.target="_blank";link.rel="noopener noreferrer";link.textContent="Open linked document ↗";body.appendChild(link)}
+ const history=section7Element("div");history.appendChild(section7Element("h3","Revision History"));
+ history.appendChild(section7Element("p","Loading revisions..."));body.appendChild(history);
+ document.getElementById("modalback").classList.add("show");
+ sharedPlayerRequest("/api/documents/"+encodeURIComponent(doc.id)+"/revisions","GET").then(result=>{
+  if(!history.isConnected)return;history.replaceChildren(section7Element("h3","Revision History"));
+  for(const revision of result.revisions||[]){
+   const details=document.createElement("details");
+   details.appendChild(section7Element("summary",`Revision ${revision.revision} · ${revision.actor_username} · ${new Date(revision.created_at).toLocaleString()}`));
+   const pre=section7Element("pre",revision.record.content||"(Linked document; no inline content)");
+   pre.style.whiteSpace="pre-wrap";pre.style.overflowWrap="anywhere";details.appendChild(pre);history.appendChild(details);
+  }
+ }).catch(error=>{if(history.isConnected)history.appendChild(section7Element("p","Unable to load revisions: "+error.message))});
+}
+function section7Render(){
+ const version=++section7Version;
+ nav();document.getElementById("title").textContent="Documents & Policies";
+ document.getElementById("crumb").textContent="Documents";
+ document.getElementById("subtitle").textContent="Shared staff procedures, policies and reference documents";
+ document.getElementById("add").style.display="none";
+ const root=document.getElementById("content");root.replaceChildren();
+ const panel=section7Element("section",undefined,"panel"),toolbar=section7Element("div",undefined,"toolbar");
+ toolbar.appendChild(section7Element("h2","Shared Document Library"));
+ if(section7CanEdit()){
+  const create=section7Element("button","+ New Document","primary");create.onclick=()=>section7ShowForm(null);toolbar.appendChild(create);
+ }
+ panel.appendChild(toolbar);
+ panel.appendChild(section7Element("p","Published documents are available to authorised staff. Drafts and archived documents remain in the database with full revision history.","muted"));
+ const region=section7Element("div","Loading shared documents...");panel.appendChild(region);root.appendChild(panel);
+ if(!section7CanView()){region.textContent="You do not have permission to view staff documents.";return}
+ sharedPlayerRequest("/api/documents","GET").then(result=>{
+  if(page!=="docs"||version!==section7Version)return;
+  const documents=(result.documents||[]).map(row=>({...row.record,id:row.id,updated_at:row.updated_at}));
+  region.replaceChildren();const filters=section7Element("div",undefined,"toolbar");
+  const search=document.createElement("input");search.type="search";search.className="search";search.placeholder="Search documents...";search.value=section7Search;
+  const category=document.createElement("select");
+  for(const value of ["All",...new Set(documents.map(d=>d.category).filter(Boolean))]){
+   const opt=document.createElement("option");opt.value=value;opt.textContent=value;category.appendChild(opt)
+  }
+  category.value=section7Category;if(![...category.options].some(o=>o.value===category.value))category.value="All";
+  const status=document.createElement("select");
+  for(const value of ["Published","Draft","Archived","All"]){const opt=document.createElement("option");opt.value=value;opt.textContent=value;status.appendChild(opt)}
+  status.value=section7Status;
+  const refresh=section7Element("button","Refresh","secondary");refresh.onclick=()=>render();
+  filters.append(search,category,status,refresh);region.appendChild(filters);
+  const count=section7Element("p",undefined,"muted");region.appendChild(count);
+  const list=section7Element("div");list.style.display="grid";list.style.gridTemplateColumns="repeat(auto-fit,minmax(270px,1fr))";list.style.gap="14px";region.appendChild(list);
+  function paint(){
+   list.replaceChildren();const visible=documents.filter(d=>
+    (section7Status==="All"||d.status===section7Status)&&
+    (section7Category==="All"||d.category===section7Category)&&
+    [d.title,d.description,d.category,d.content].some(v=>String(v||"").toLowerCase().includes(section7Search.toLowerCase())));
+   count.textContent=`${visible.length} of ${documents.length} documents`;
+   if(!visible.length)list.appendChild(section7Element("p","No matching documents."));
+   for(const doc of visible){
+    const card=section7Element("article",undefined,"panel");card.style.padding="16px";
+    card.appendChild(section7Element("h3",doc.title));
+    card.appendChild(section7Element("p",`${doc.category||"Uncategorised"} · ${doc.status} · v${doc.revision||1}`,"muted"));
+    if(doc.description)card.appendChild(section7Element("p",doc.description));
+    const actions=section7Element("div",undefined,"actions");
+    const view=section7Element("button","Read / History","secondary");view.onclick=()=>section7Read(doc);actions.appendChild(view);
+    if(section7CanEdit()&&(doc.status!=="Archived"||section7CanArchive())){
+     const edit=section7Element("button","Edit","secondary");edit.onclick=()=>section7ShowForm(doc);actions.appendChild(edit);
+    }
+    if(section7CanArchive()&&doc.status!=="Archived"){
+     const archive=section7Element("button","Archive","secondary");archive.onclick=async()=>{
+      if(!confirm(`Archive "${doc.title}"? Its revision history will remain available.`))return;
+      try{await sharedPlayerRequest("/api/documents/"+encodeURIComponent(doc.id),"DELETE",{expectedUpdatedAt:doc.updated_at});render()}
+      catch(error){alert(error.message)}
+     };actions.appendChild(archive);
+    }
+    card.appendChild(actions);list.appendChild(card);
+   }
+  }
+  search.oninput=()=>{section7Search=search.value;paint()};
+  category.onchange=()=>{section7Category=category.value;paint()};
+  status.onchange=()=>{section7Status=status.value;paint()};paint();
+ }).catch(error=>{if(version===section7Version&&page==="docs")region.textContent="Unable to load documents: "+error.message});
+}
+const section7PreviousRender=render;
+render=function(){if(page==="docs")return section7Render();return section7PreviousRender()};
+render();
+
 </script>
  </body>
 </html>
