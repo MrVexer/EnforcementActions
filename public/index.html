@@ -5855,7 +5855,14 @@ function openAuditEntry(id) {
 
     document.getElementById('auditClose').onclick = close;
 }
-    function close(){document.getElementById('modalback').classList.remove('show')}document.getElementById('close').onclick=close;document.getElementById('modalback').onclick=e=>{if(e.target.id==='modalback')close()};document.getElementById('add').onclick=()=>edit(null);document.getElementById('export').onclick=()=>{let blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='vengeful-realms-demo-export.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};document.getElementById('mobileToggle').onclick=()=>document.body.classList.toggle('sidebar-open');
+    function close(){document.getElementById('modalback').classList.remove('show')}document.getElementById('close').onclick=close;document.getElementById('modalback').onclick=e=>{if(e.target.id==='modalback')close()};document.getElementById('add').onclick = () => {
+  if (page === 'players') {
+    console.log('Shared Player Database: Create Player requested.');
+    return;
+  }
+
+  edit(null);
+};document.getElementById('export').onclick=()=>{let blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='vengeful-realms-demo-export.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};document.getElementById('mobileToggle').onclick=()=>document.body.classList.toggle('sidebar-open');
 
    // =====================================================
 // PUNISHMENT MANAGEMENT DASHBOARD
