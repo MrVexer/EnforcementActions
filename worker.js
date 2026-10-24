@@ -437,7 +437,8 @@ export default {
           const dbError = await updateResponse.json()
             .catch(() => ({}));
 
-          if (dbError.code === "40001") {
+          if (dbError.code === "P0001" &&
+    dbError.message === "Player was modified by another user") {
             return json({
               error: "This player was changed by another staff member. Refresh before editing."
             }, 409);
