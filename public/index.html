@@ -3595,11 +3595,17 @@
   </div>
   <!-- Vengeful Realms Discord authentication -->
 <style>
-  body > aside,
-  body > main,
-  body > .modalback {
-    display: none !important;
-  }
+  /* Keep the workspace hidden until access is verified. */
+body:not(.vr-workspace-authorized) > aside,
+body:not(.vr-workspace-authorized) > main,
+body:not(.vr-workspace-authorized) > .modalback {
+  display: none !important;
+}
+
+/* Hide the login screen when the workspace is authorised. */
+body.vr-workspace-authorized #vr-auth-screen {
+  display: none !important;
+}
 
   #vr-auth-screen {
     min-height: 100vh;
