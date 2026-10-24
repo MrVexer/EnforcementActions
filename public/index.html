@@ -3877,17 +3877,11 @@
                 }
               }
 
-              if (dbResult.database === "connected") {
-                message.textContent =
-                  "Discord staff verified: " +
-                  verification.primaryRole.replaceAll("_", " ") +
-                  ". Secure database connection successful. " +
-                  "Workspace remains locked pending permissions.";
-              } else {
-                message.textContent =
-                  "Discord verified, but database test failed: " +
-                  (dbResult.error || "Unknown error");
-              }
+              if (dbResult.database !== "connected") {
+  message.textContent =
+    "Discord verified, but database test failed: " +
+    (dbResult.error || "Unknown error");
+}
             } catch (error) {
               console.error("Database test error:", error);
 
