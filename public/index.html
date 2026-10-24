@@ -3826,6 +3826,57 @@
 
               console.log("Database connection test:", dbResult);
 
+                           // Test authenticated Player Database access.
+              if (dbResult.database === "connected") {
+                try {
+                  const playersResponse = await fetch(
+                    "/api/players",
+                    {
+                      method: "GET",
+                      headers: {
+                        Authorization: `Bearer ${accessToken}`
+                      },
+                      cache: "no-store"
+                    }
+                  );
+
+                  const playersResult =
+                    await playersResponse.json();
+
+                  if (currentUpdate !== updateCounter) return;
+
+                  console.log(
+                    "Player Database test:",
+                    playersResult
+                  );
+
+                  if (
+                    playersResponse.ok &&
+                    playersResult.success === true
+                  ) {
+                    message.textContent =
+                      "Discord verified. Database connected. " +
+                      "Player Database accessible: " +
+                      playersResult.count +
+                      " records found. " +
+                      "Workspace remains locked.";
+                  } else {
+                    message.textContent =
+                      "Player Database access failed: " +
+                      (playersResult.error || "Unknown error");
+                  }
+
+                } catch (error) {
+                  console.error(
+                    "Player Database test error:",
+                    error
+                  );
+
+                  message.textContent =
+                    "Player Database request failed.";
+                }
+              }
+
               if (dbResult.database === "connected") {
                 message.textContent =
                   "Discord staff verified: " +
