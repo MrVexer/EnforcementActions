@@ -1139,6 +1139,87 @@ if (
       }catch(error){console.error("Task API error",error);return json({error:"Task service unavailable"},503)}
     }
 
+    // Section 7: shared documents and revision history.
+    if (url.pathname === "/api/documents" || url.pathname.startsWith("/api/documents/")) {
+      const collection=url.pathname==="/api/documents";
+      const pathTail=collection?"":url.pathname.slice("/api/documents/".length);
+      const revisionRoute=pathTail.endsWith("/revisions");
+      const id=collection?"":decodeURIComponent(revisionRoute?pathTail.slice(0,-10):pathTail);
+      const uuid=/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i;
+      if (!collection&&!uuid.test(id))return json({error:"Invalid document ID"},400);
+      if (!(collection?["GET","POST"]:revisionRoute?["GET"]:["PUT","DELETE"]).includes(request.method))
+        return json({error:"Method not allowed"},405);
+      try {
+        const auth=await verifyStaff(request,env);
+        if(!auth.ok)return auth;
+        const staff=await auth.json();
+        const roles=staff.roles||[];
+        const managers=["operations_manager","head_of_enforcement"];
+        const editors=[...managers,"enforcement_captain"];
+        const readers=[...editors,"enforcement_officer","trial_enforcement","support_team"];
+        const allowed=request.method==="GET"?readers:request.method==="DELETE"?managers:editors;
+        if(!staff.authorized||!roles.some(role=>allowed.includes(role)))return json({error:"Insufficient permissions"},403);
+        if(!env.SUPABASE_SECRET_KEY)return json({error:"Database unavailable"},503);
+        const headers={apikey:env.SUPABASE_SECRET_KEY,"Content-Type":"application/json",Accept:"application/json"};
+        if(request.method==="GET"){
+          const endpoint=revisionRoute?
+            `${SUPABASE_URL}/rest/v1/vr_document_revisions?document_id=eq.${encodeURIComponent(id)}&select=revision,record,actor_username,created_at&order=revision.desc&limit=100`:
+            `${SUPABASE_URL}/rest/v1/vr_documents?select=id,record,updated_at&order=updated_at.desc&limit=500`;
+          const response=await fetch(endpoint,{headers,cache:"no-store"});
+          if(!response.ok)return json({error:"Unable to load documents"},503);
+          const rows=await response.json();
+          return json({success:true,[revisionRoute?"revisions":"documents"]:rows});
+        }
+        const raw=await request.text();
+        if(new TextEncoder().encode(raw).length>45000)return json({error:"Request too large"},413);
+        let input;try{input=JSON.parse(raw)}catch{return json({error:"Invalid JSON"},400)}
+        if(!input||typeof input!=="object"||Array.isArray(input))return json({error:"Invalid document data"},400);
+        const expected=input.expectedUpdatedAt;
+        if(!collection&&(typeof expected!=="string"||!Number.isFinite(Date.parse(expected))))return json({error:"Invalid document version"},400);
+        const actor={p_actor_discord_id:staff.discordId,p_actor_username:staff.username};
+        const rpc=async(name,params)=>{
+          const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`,{
+            method:"POST",headers,body:JSON.stringify(params),cache:"no-store"});
+          if(response.ok)return json(await response.json(),request.method==="POST"?201:200);
+          const detail=await response.json().catch(()=>({}));
+          if(detail.code==="P0001")return json({error:"Document changed. Refresh before editing."},409);
+          if(detail.code==="P0002")return json({error:"Document not found"},404);
+          console.error("Document RPC failed",response.status,detail.code,detail.message);
+          return json({error:"Document database operation failed"},503);
+        };
+        const newId=collection?crypto.randomUUID():id;
+        let previous=null;
+        if(!collection){
+          const response=await fetch(`${SUPABASE_URL}/rest/v1/vr_documents?id=eq.${encodeURIComponent(id)}&select=id,record&limit=1`,{headers,cache:"no-store"});
+          if(!response.ok)return json({error:"Unable to load document"},503);
+          const rows=await response.json();
+          if(!rows.length)return json({error:"Document not found"},404);
+          previous=rows[0].record;
+        }
+        if(request.method==="DELETE"){
+          const record={...previous,status:"Archived",archivedAt:new Date().toISOString()};
+          return rpc("vr_update_document",{p_id:id,p_record:record,...actor,p_expected_updated_at:expected});
+        }
+        const limits={title:180,category:80,description:1500,content:30000,url:2000,status:20};
+        const fields={};
+        for(const [key,max] of Object.entries(limits)){
+          if(typeof input[key]!=="string"||input[key].length>max)return json({error:`Invalid ${key}`},400);
+          fields[key]=input[key].trim();
+        }
+        if(!fields.title)return json({error:"Document title is required"},400);
+        if(!fields.content&&!fields.url)return json({error:"Provide document content or a URL"},400);
+        if(!["Draft","Published","Archived"].includes(fields.status))return json({error:"Invalid document status"},400);
+        if(fields.url){try{const parsed=new URL(fields.url);if(!["https:","http:"].includes(parsed.protocol))throw Error()}catch{return json({error:"Document URL must be an http(s) address"},400)}}
+        if(fields.status==="Archived"&&!roles.some(role=>managers.includes(role)))return json({error:"Only senior management can archive documents"},403);
+        if(previous?.status==="Archived"&&!roles.some(role=>managers.includes(role)))return json({error:"Only senior management can edit archived documents"},403);
+        const now=new Date().toISOString();
+        const record=collection?{id:newId,...fields,revision:1,createdAt:now,createdByDiscordId:staff.discordId,createdBy:staff.username}:
+          {...previous,...fields,id:newId,updatedByDiscordId:staff.discordId,updatedBy:staff.username};
+        return rpc(collection?"vr_create_document":"vr_update_document",{
+          p_id:newId,p_record:record,...actor,...(collection?{}:{p_expected_updated_at:expected})});
+      }catch(error){console.error("Document API error",error);return json({error:"Document service unavailable"},503)}
+    }
+
     if (url.pathname.startsWith("/api/")) {
       return json(
         { error: "Endpoint not available" },
