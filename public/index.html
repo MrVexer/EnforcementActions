@@ -12800,6 +12800,304 @@ render = function () {
     });
 };
 
+// ==========================================
+// SECTION 2 - LIVE INFRACTION MANAGEMENT
+// ==========================================
+let sharedInfractionSearch = "";
+let sharedInfractionStatus = "All";
+let sharedInfractionVersion = 0;
+const infractionFieldSchema = [
+    ["player","Player","player",64],
+    ["type","Rule Violated","text",150],
+    ["severity","Severity","select:Low|Moderate|High|Critical",20],
+    ["date","Incident Date","date",10],
+    ["officer","Reporting Officer","text",120],
+    ["status","Status","select:Open|Investigating|Resolved|Dismissed",30],
+    ["description","Incident Description","textarea",8000],
+    ["investigationNotes","Investigation Notes","textarea",8000],
+    ["assignedOfficer","Assigned Officer","text",120],
+    ["investigationStage","Investigation Stage","select:Reported|Assigned|Investigating|Pending Review|Closed",40],
+    ["casePriority","Case Priority","select:Low|Normal|High|Urgent",20],
+    ["investigationFindings","Investigation Findings","textarea",8000],
+    ["caseOutcome","Case Outcome","select:Undetermined|Substantiated|Unsubstantiated|Inconclusive|Withdrawn",40],
+    ["resolutionNotes","Resolution Notes","textarea",8000],
+    ["resolutionDate","Resolution Date","date",10],
+    ["evidence","Evidence Links (one per line)","textarea",8000]
+];
+const infractionDefaults = {
+    severity:"Moderate",status:"Open",investigationStage:"Reported",
+    casePriority:"Normal",caseOutcome:"Undetermined",
+    date:new Date().toISOString().slice(0,10)
+};
+function sharedInfractionRole(level) {
+    const roles = window.vrStaffPermissions?.roles;
+    if (window.vrStaffPermissions?.authorized !== true || !Array.isArray(roles)) return false;
+    const managers = ["operations_manager","head_of_enforcement"];
+    if (level==="delete") return roles.some(role=>managers.includes(role));
+    return roles.some(role=>[...managers,"enforcement_captain","enforcement_officer"].includes(role));
+}
+async function sharedInfractionRequest(path,method="GET",payload) {
+    // Reuse the authenticated request helper from the Player Database.
+    return sharedPlayerRequest(path,method,payload);
+}
+async function openSharedInfractionForm(record=null) {
+    if (page!=="infractions" || !sharedInfractionRole("edit")) return;
+    const editing=Boolean(record);
+    const body=document.getElementById("modalBody");
+    const title=document.getElementById("modalTitle");
+    const modal=document.getElementById("modalback");
+    title.textContent=editing ? "Edit Infraction" : "Create Infraction";
+    body.replaceChildren();
+    const loading=document.createElement("p");
+    loading.textContent="Loading shared players...";
+    body.appendChild(loading);
+    modal.classList.add("show");
+    let players;
+    try { players=await loadSharedPlayers(); }
+    catch(error) { loading.textContent="Unable to load players: "+error.message;return; }
+    if (page!=="infractions" || !modal.classList.contains("show")) return;
+    body.replaceChildren();
+    const form=document.createElement("form");
+    form.className="formgrid";
+    const controls={};
+    for (const [key,label,type,max] of infractionFieldSchema) {
+        const field=document.createElement("div");
+        field.className="field"+(type==="textarea"?" full":"");
+        const caption=document.createElement("label");
+        caption.textContent=label;
+        let control;
+        if (type==="textarea") {
+            control=document.createElement("textarea");
+            control.rows=3;
+        } else if (type==="player" || type.startsWith("select:")) {
+            control=document.createElement("select");
+            if (type==="player") {
+                const blank=document.createElement("option");
+                blank.value="";blank.textContent="Choose a player";
+                control.appendChild(blank);
+                for (const player of players) {
+                    const option=document.createElement("option");
+                    option.value=player.id;
+                    option.textContent=player.name+" ("+(player.discord||player.id)+")";
+                    control.appendChild(option);
+                }
+            } else {
+                for (const value of type.slice(7).split("|")) {
+                    const option=document.createElement("option");
+                    option.value=value;option.textContent=value;
+                    control.appendChild(option);
+                }
+            }
+        } else {
+            control=document.createElement("input");
+            control.type=type;
+        }
+        control.maxLength=max;
+        control.value=String(record?.[key]??infractionDefaults[key]??"");
+        control.required=key==="player" || key==="type";
+        caption.appendChild(control);
+        field.appendChild(caption);
+        form.appendChild(field);
+        controls[key]=control;
+    }
+    const notice=document.createElement("div");
+    notice.className="notice";
+    notice.style.display="none";
+    notice.style.gridColumn="1 / -1";
+    notice.setAttribute("role","alert");
+    form.appendChild(notice);
+    const actions=document.createElement("div");
+    actions.className="actions";
+    actions.style.gridColumn="1 / -1";
+    const cancel=document.createElement("button");
+    cancel.type="button";cancel.className="secondary";cancel.textContent="Cancel";
+    cancel.onclick=()=>close();
+    const submit=document.createElement("button");
+    submit.type="submit";submit.className="primary";
+    submit.textContent=editing?"Save Changes":"Create Infraction";
+    actions.append(cancel,submit);
+    if (editing && sharedInfractionRole("delete")) {
+        const remove=document.createElement("button");
+        remove.type="button";remove.className="secondary";
+        remove.textContent="Delete Infraction";
+        remove.style.marginRight="auto";
+        remove.onclick=async()=>{
+            if (!confirm("Delete this infraction? This cannot be undone. An audit entry will be retained.")) return;
+            submit.disabled=true;remove.disabled=true;
+            try {
+                await sharedInfractionRequest("/api/infractions/"+encodeURIComponent(record.id),
+                    "DELETE",{expectedUpdatedAt:record.updated_at});
+                close();if(page==="infractions")render();
+            } catch(error) {
+                notice.textContent=error.message;notice.style.display="";
+                submit.disabled=false;remove.disabled=false;
+            }
+        };
+        actions.prepend(remove);
+    }
+    form.appendChild(actions);
+    form.onsubmit=async event=>{
+        event.preventDefault();
+        if (!sharedInfractionRole("edit")) return;
+        const fields=Object.fromEntries(Object.entries(controls).map(
+            ([key,control])=>[key,control.value.trim()]));
+        const payload=editing?{...fields,expectedUpdatedAt:record.updated_at}:fields;
+        submit.disabled=true;cancel.disabled=true;
+        notice.style.display="none";
+        try {
+            await sharedInfractionRequest(editing?
+                "/api/infractions/"+encodeURIComponent(record.id):"/api/infractions",
+                editing?"PUT":"POST",payload);
+            close();if(page==="infractions")render();
+        } catch(error) {
+            notice.textContent=error.message;
+            notice.style.display="";
+        } finally {
+            submit.disabled=false;cancel.disabled=false;
+        }
+    };
+    body.appendChild(form);
+}
+
+const renderBeforeSharedInfractions=render;
+render=function(){
+    const version=++sharedInfractionVersion;
+    if(page!=="infractions")return renderBeforeSharedInfractions();
+    nav();
+    document.getElementById("title").textContent="Infractions";
+    document.getElementById("crumb").textContent="Infractions";
+    document.getElementById("subtitle").textContent="Shared investigations and rule violations";
+    const add=document.getElementById("add");
+    add.style.display=sharedInfractionRole("edit")?"":"none";
+    add.textContent="Create Infraction";
+    add.onclick=()=>openSharedInfractionForm();
+    const content=document.getElementById("content");
+    content.replaceChildren();
+    const loading=document.createElement("div");
+    loading.className="panel";
+    loading.textContent="Loading shared infractions...";
+    content.appendChild(loading);
+    Promise.all([
+        sharedInfractionRequest("/api/infractions"),loadSharedPlayers()
+    ]).then(([result,players])=>{
+        if(page!=="infractions" || version!==sharedInfractionVersion ||
+            !document.body.classList.contains("vr-workspace-authorized"))return;
+        const infractions=(result.infractions||[]).map(item=>({
+            ...item.record,id:item.id,updated_at:item.updated_at
+        }));
+        const playerNames=new Map(players.map(player=>[player.id,player.name]));
+        content.replaceChildren();
+        const toolbar=document.createElement("div");
+        toolbar.className="toolbar";
+        const search=document.createElement("input");
+        search.className="search";search.type="search";
+        search.placeholder="Search cases, players, rule violations or officers...";
+        search.value=sharedInfractionSearch;
+        const status=document.createElement("select");
+        for(const name of ["All","Open","Investigating","Resolved","Dismissed"]){
+            const option=document.createElement("option");
+            option.value=name;option.textContent=name;status.appendChild(option);
+        }
+        status.value=sharedInfractionStatus;
+        const refresh=document.createElement("button");
+        refresh.className="secondary";refresh.textContent="Refresh";
+        refresh.onclick=()=>render();
+        toolbar.append(search,status,refresh);
+        content.appendChild(toolbar);
+        const panel=document.createElement("div");
+        panel.className="panel";
+        const heading=document.createElement("h2");
+        panel.appendChild(heading);
+        const wrapper=document.createElement("div");
+        wrapper.className="tablewrap";
+        const table=document.createElement("table");
+        const header=document.createElement("tr");
+        const columns=["Case ID","Player","Rule Violated","Severity","Status","Date","Officer"];
+        if(sharedInfractionRole("edit"))columns.push("Actions");
+        for(const name of columns){
+            const th=document.createElement("th");th.textContent=name;header.appendChild(th);
+        }
+        const thead=document.createElement("thead");thead.appendChild(header);
+        const tbody=document.createElement("tbody");
+        table.append(thead,tbody);wrapper.appendChild(table);panel.appendChild(wrapper);
+        content.appendChild(panel);
+        function updateRows(){
+            tbody.replaceChildren();
+            const term=sharedInfractionSearch.trim().toLowerCase();
+            const visible=infractions.filter(item=>
+                (sharedInfractionStatus==="All"||item.status===sharedInfractionStatus) &&
+                [item.id,playerNames.get(item.player)||item.player,item.type,item.severity,
+                    item.status,item.officer,item.description,item.assignedOfficer]
+                    .some(value=>String(value??"").toLowerCase().includes(term))
+            );
+            heading.textContent=`Shared Infractions (${visible.length} of ${infractions.length})`;
+            for(const item of visible){
+                const tr=document.createElement("tr");
+                const values=[item.id,playerNames.get(item.player)||"Unknown player",
+                    item.type,item.severity,item.status,item.date,item.officer];
+                for(const value of values){
+                    const td=document.createElement("td");td.textContent=String(value??"");tr.appendChild(td);
+                }
+                if(sharedInfractionRole("edit")){
+                    const td=document.createElement("td");
+                    const button=document.createElement("button");
+                    button.className="secondary";button.textContent="Edit";
+                    button.onclick=()=>openSharedInfractionForm(item);
+                    td.appendChild(button);tr.appendChild(td);
+                } else {
+                    tr.style.cursor="pointer";
+                    tr.onclick=()=>{
+                        const details=document.createElement("div");
+                        details.className="record";
+                        for(const [key,label] of infractionFieldSchema.map(([k,l])=>[k,l])){
+                            const caption=document.createElement("strong");
+                            caption.textContent=label;
+                            const value=document.createElement("p");
+                            value.textContent=key==="player"?
+                                playerNames.get(item.player)||item.player:String(item[key]??"");
+                            details.append(caption,value);
+                        }
+                        document.getElementById("modalTitle").textContent="Infraction Details";
+                        document.getElementById("modalBody").replaceChildren(details);
+                        document.getElementById("modalback").classList.add("show");
+                    };
+                }
+                tbody.appendChild(tr);
+            }
+            if(!visible.length){
+                const tr=document.createElement("tr");
+                const td=document.createElement("td");
+                td.colSpan=columns.length;td.className="empty";
+                td.textContent=infractions.length?"No matching infractions.":"No shared infractions yet.";
+                tr.appendChild(td);tbody.appendChild(tr);
+            }
+        }
+        search.oninput=()=>{sharedInfractionSearch=search.value;updateRows();};
+        status.onchange=()=>{sharedInfractionStatus=status.value;updateRows();};
+        updateRows();
+    }).catch(error=>{
+        if(page!=="infractions" || version!==sharedInfractionVersion)return;
+        content.replaceChildren();
+        const notice=document.createElement("div");notice.className="notice";
+        notice.textContent="Unable to load shared infractions: "+error.message;
+        content.appendChild(notice);
+    });
+};
+
+// Keep the existing Create Player behavior when leaving the Infractions page.
+const sharedInfractionAddButton=document.getElementById("add");
+const originalSharedPlayerAdd=sharedInfractionAddButton.onclick;
+// Other pages' click handler is restored by the page renderer below.
+const renderWithInfractionButton=render;
+render=function(){
+    const result=renderWithInfractionButton();
+    if(page!=="infractions"){
+        sharedInfractionAddButton.onclick=originalSharedPlayerAdd;
+        if(page==="players")sharedInfractionAddButton.textContent="Create Player";
+    }
+    return result;
+};
+
 // Render the workspace.
 render();
 
