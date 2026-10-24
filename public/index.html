@@ -13551,6 +13551,152 @@ render=function(){
 };
 render();
 
-  </script>
+  
+// =====================================================
+// SECTION 5 — SHARED STAFF DIRECTORY (SUPABASE)
+// =====================================================
+let sharedStaffVersion=0,sharedStaffSearch="",sharedStaffStatus="All";
+const sharedStaffRoles=["Operations Manager","Head of Enforcement","Enforcement Captain","Enforcement Officer","Trial Enforcement","Support Team","Story Team"];
+const sharedStaffFields=[
+  ["name","Display Name"],["discordId","Discord User ID"],["role","Directory Role"],
+  ["status","Status"],["team","Team / Department"],["joinedAt","Joined Date"],["notes","Internal Notes"]
+];
+function canEditSharedStaff(){
+  return window.vrStaffPermissions?.authorized===true &&
+    (window.vrStaffPermissions.roles||[]).some(role=>["operations_manager","head_of_enforcement"].includes(role));
+}
+function canViewSharedStaff(){
+  return window.vrStaffPermissions?.authorized===true &&
+    (window.vrStaffPermissions.roles||[]).some(role=>["operations_manager","head_of_enforcement","enforcement_captain","enforcement_officer","trial_enforcement","support_team"].includes(role));
+}
+function sharedStaffNode(tag,text,className){
+  const node=document.createElement(tag);
+  if(text!==undefined)node.textContent=String(text);
+  if(className)node.className=className;
+  return node;
+}
+function openSharedStaffForm(existing=null){
+  if(!canEditSharedStaff())return;
+  const editing=Boolean(existing);
+  const body=document.getElementById("modalBody");body.replaceChildren();
+  document.getElementById("modalTitle").textContent=editing?"Edit Shared Staff Record":"Add Shared Staff Member";
+  const form=document.createElement("form"),grid=sharedStaffNode("div",undefined,"formgrid"),controls={};
+  for(const [key,label] of sharedStaffFields){
+    const wrap=sharedStaffNode("div",undefined,"field");
+    const caption=sharedStaffNode("label",label);let field;
+    if(key==="role"||key==="status"){
+      field=document.createElement("select");
+      const choices=key==="role"?sharedStaffRoles:["Active","On Leave","Inactive","Archived"];
+      for(const choice of choices){const option=document.createElement("option");option.value=choice;option.textContent=choice;field.appendChild(option)}
+    }else if(key==="notes"){
+      field=document.createElement("textarea");field.rows=4;
+    }else{
+      field=document.createElement("input");field.type=key==="joinedAt"?"date":"text";
+    }
+    field.value=existing?.[key]??(key==="status"?"Active":key==="role"?"Enforcement Officer":"");
+    field.required=key==="name";
+    field.maxLength=key==="notes"?4000:key==="discordId"?20:100;
+    caption.appendChild(field);wrap.appendChild(caption);grid.appendChild(wrap);controls[key]=field;
+  }
+  const note=sharedStaffNode("p","Directory roles are informational only. Actual website access is verified against Discord roles; changing this record does not change Discord permissions.","muted");
+  const warning=sharedStaffNode("p",undefined,"muted");warning.style.display="none";
+  const actions=sharedStaffNode("div",undefined,"actions");
+  const cancel=sharedStaffNode("button","Cancel","secondary");cancel.type="button";cancel.onclick=()=>close();
+  const submit=sharedStaffNode("button",editing?"Save Changes":"Create Staff Record","primary");submit.type="submit";
+  actions.append(cancel,submit);form.append(grid,note,warning,actions);body.appendChild(form);
+  document.getElementById("modalback").classList.add("show");
+  form.onsubmit=async event=>{
+    event.preventDefault();warning.style.display="none";
+    const payload={};for(const [key] of sharedStaffFields)payload[key]=controls[key].value.trim();
+    if(editing)payload.expectedUpdatedAt=existing.updated_at;
+    submit.disabled=true;cancel.disabled=true;
+    try{
+      await sharedPlayerRequest(editing?"/api/staff/"+encodeURIComponent(existing.id):"/api/staff",editing?"PUT":"POST",payload);
+      close();if(page==="staffadmin")render();
+    }catch(error){warning.textContent=error.message;warning.style.display=""}
+    finally{submit.disabled=false;cancel.disabled=false}
+  };
+}
+async function archiveSharedStaff(item){
+  if(!canEditSharedStaff())return;
+  if(!confirm(`Archive ${item.name}? This preserves the audit history and does not change their Discord roles.`))return;
+  try{
+    await sharedPlayerRequest("/api/staff/"+encodeURIComponent(item.id),"DELETE",{expectedUpdatedAt:item.updated_at});
+    if(page==="staffadmin")render();
+  }catch(error){alert(error.message)}
+}
+function mountSharedStaffDirectory(){
+  if(page!=="staffadmin")return;
+  const content=document.getElementById("content");
+  if(!content)return;
+  const version=++sharedStaffVersion;
+  const section=sharedStaffNode("section",undefined,"panel");section.id="sharedStaffDirectory";
+  const header=sharedStaffNode("div",undefined,"toolbar");
+  const heading=sharedStaffNode("h2","Shared Staff Directory");header.appendChild(heading);
+  if(canEditSharedStaff()){
+    const add=sharedStaffNode("button","Add Staff","primary");add.onclick=()=>openSharedStaffForm();header.appendChild(add);
+  }
+  section.appendChild(header);
+  section.appendChild(sharedStaffNode("p","Live Supabase staff records. Discord remains the authority for actual permissions.","muted"));
+  const region=sharedStaffNode("div","Loading shared staff records...");section.appendChild(region);
+  content.prepend(section);
+  if(!canViewSharedStaff()){
+    region.textContent="You do not have access to the shared staff directory.";return;
+  }
+  sharedPlayerRequest("/api/staff","GET").then(result=>{
+    if(page!=="staffadmin"||version!==sharedStaffVersion||!document.body.classList.contains("vr-workspace-authorized"))return;
+    const records=(result.staff||[]).map(row=>({...row.record,id:row.id,updated_at:row.updated_at}));
+    region.replaceChildren();
+    const toolbar=sharedStaffNode("div",undefined,"toolbar");
+    const search=document.createElement("input");search.type="search";search.className="search";
+    search.placeholder="Search staff, roles, Discord IDs...";search.value=sharedStaffSearch;
+    const status=document.createElement("select");
+    for(const optionText of ["All","Active","On Leave","Inactive","Archived"]){
+      const option=document.createElement("option");option.value=optionText;option.textContent=optionText;status.appendChild(option);
+    }status.value=sharedStaffStatus;
+    const refresh=sharedStaffNode("button","Refresh","secondary");refresh.onclick=()=>render();
+    toolbar.append(search,status,refresh);region.appendChild(toolbar);
+    const count=sharedStaffNode("p",undefined,"muted");region.appendChild(count);
+    const wrapper=sharedStaffNode("div",undefined,"tablewrap");const table=document.createElement("table");
+    const thead=document.createElement("thead"),headRow=document.createElement("tr");
+    const columns=["Name","Discord ID","Role","Team","Status","Joined"];
+    if(canEditSharedStaff())columns.push("Actions");
+    for(const label of columns)headRow.appendChild(sharedStaffNode("th",label));
+    thead.appendChild(headRow);const tbody=document.createElement("tbody");table.append(thead,tbody);
+    wrapper.appendChild(table);region.appendChild(wrapper);
+    function update(){
+      tbody.replaceChildren();const term=sharedStaffSearch.trim().toLowerCase();
+      const visible=records.filter(item=>(sharedStaffStatus==="All"||item.status===sharedStaffStatus)&&
+        [item.name,item.discordId,item.role,item.team,item.status,item.notes].some(value=>String(value||"").toLowerCase().includes(term)));
+      count.textContent=`${visible.length} of ${records.length} staff records`;
+      for(const item of visible){
+        const tr=document.createElement("tr");
+        for(const value of [item.name,item.discordId||"—",item.role,item.team||"—",item.status,item.joinedAt||"—"]){
+          tr.appendChild(sharedStaffNode("td",value||"—"));
+        }
+        if(canEditSharedStaff()){
+          const cell=document.createElement("td"),edit=sharedStaffNode("button","Edit","secondary");
+          edit.onclick=()=>openSharedStaffForm(item);cell.appendChild(edit);
+          if(item.status!=="Archived"){
+            const archive=sharedStaffNode("button","Archive","secondary");archive.style.marginLeft="6px";
+            archive.onclick=()=>archiveSharedStaff(item);cell.appendChild(archive);
+          }tr.appendChild(cell);
+        }
+        tbody.appendChild(tr);
+      }
+      if(!visible.length){const tr=document.createElement("tr"),td=sharedStaffNode("td","No matching staff records.");td.colSpan=columns.length;tr.appendChild(td);tbody.appendChild(tr)}
+    }
+    search.oninput=()=>{sharedStaffSearch=search.value;update()};
+    status.onchange=()=>{sharedStaffStatus=status.value;update()};update();
+  }).catch(error=>{if(version===sharedStaffVersion&&page==="staffadmin")region.textContent="Unable to load shared staff directory: "+error.message});
+}
+const renderBeforeSection5Staff=render;
+render=function(){
+  renderBeforeSection5Staff();
+  if(page==="staffadmin")mountSharedStaffDirectory();
+};
+render();
+
+</script>
  </body>
 </html>
