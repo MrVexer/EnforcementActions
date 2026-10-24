@@ -283,6 +283,207 @@ export default {
       }
     }
 
+        // STEP 19B: Secure player editing
+    // PUT /api/players/{player-id}
+    if (url.pathname.startsWith("/api/players/")) {
+      if (request.method !== "PUT") {
+        return json({ error: "Method not allowed" }, 405);
+      }
+
+      const playerId = decodeURIComponent(
+        url.pathname.slice("/api/players/".length)
+      );
+
+      if (!/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i.test(playerId)) {
+        return json({ error: "Invalid player ID" }, 400);
+      }
+
+      try {
+        // Verify the session and Discord membership.
+        const authResponse = await verifyStaff(request, env);
+        if (!authResponse.ok) return authResponse;
+
+        const staff = await authResponse.json();
+
+        // Temporary restriction: Operations Managers only.
+        if (
+          staff.authorized !== true ||
+          !staff.roles?.includes("operations_manager")
+        ) {
+          return json({ error: "Insufficient permissions" }, 403);
+        }
+
+        if (!env.SUPABASE_SECRET_KEY) {
+          return json({ error: "Database unavailable" }, 503);
+        }
+
+        // Limit incoming request size.
+        const bodyText = await request.text();
+
+        if (new TextEncoder().encode(bodyText).length > 16384) {
+          return json({ error: "Request too large" }, 413);
+        }
+
+        let input;
+        try {
+          input = JSON.parse(bodyText);
+        } catch {
+          return json({ error: "Invalid JSON" }, 400);
+        }
+
+        if (
+          !input ||
+          typeof input !== "object" ||
+          Array.isArray(input)
+        ) {
+          return json({ error: "Invalid player data" }, 400);
+        }
+
+        if (
+          typeof input.expectedUpdatedAt !== "string" ||
+          !/^\d{4}-\d{2}-\d{2}T/.test(input.expectedUpdatedAt) ||
+          !Number.isFinite(Date.parse(input.expectedUpdatedAt))
+        ) {
+          return json({
+            error: "Missing or invalid record version"
+          }, 400);
+        }
+
+        // Only accept the four editable player fields.
+        for (const field of ["name", "discord", "characters", "notes"]) {
+          if (typeof input[field] !== "string") {
+            return json({
+              error: `Invalid ${field} field`
+            }, 400);
+          }
+        }
+
+        const name = input.name.trim();
+        const discord = input.discord.trim();
+        const characters = input.characters.trim();
+        const notes = input.notes.trim();
+
+        if (!name || name.length > 100) {
+          return json({ error: "Invalid player name" }, 400);
+        }
+
+        if (discord && !/^\d{17,20}$/.test(discord)) {
+          return json({ error: "Invalid Discord ID" }, 400);
+        }
+
+        if (characters.length > 2000 || notes.length > 5000) {
+          return json({ error: "Player details too long" }, 400);
+        }
+
+        const headers = {
+          apikey: env.SUPABASE_SECRET_KEY,
+          "Content-Type": "application/json",
+          Accept: "application/json"
+        };
+
+        // Read the current record to preserve its
+        // server-controlled and additional existing fields.
+        const readResponse = await fetch(
+          `${SUPABASE_URL}/rest/v1/vr_players` +
+          `?id=eq.${encodeURIComponent(playerId)}` +
+          `&select=id,record,updated_at&limit=1`,
+          {
+            method: "GET",
+            headers,
+            cache: "no-store"
+          }
+        );
+
+        if (!readResponse.ok) {
+          console.error("Player lookup failed:", readResponse.status);
+          return json({ error: "Unable to load player" }, 503);
+        }
+
+        const rows = await readResponse.json();
+
+        if (rows.length === 0) {
+          return json({ error: "Player not found" }, 404);
+        }
+
+        const existing = rows[0];
+
+        const updatedPlayer = {
+          ...existing.record,
+          id: existing.id,
+          name,
+          discord,
+          characters,
+          notes
+        };
+
+        // Atomic update and audit log transaction.
+        const updateResponse = await fetch(
+          `${SUPABASE_URL}/rest/v1/rpc/vr_update_player`,
+          {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              p_id: playerId,
+              p_record: updatedPlayer,
+              p_actor_discord_id: staff.discordId,
+              p_actor_username: staff.username,
+              p_expected_updated_at: input.expectedUpdatedAt
+            }),
+            cache: "no-store"
+          }
+        );
+
+        if (!updateResponse.ok) {
+          const dbError = await updateResponse.json()
+            .catch(() => ({}));
+
+          if (dbError.code === "40001") {
+            return json({
+              error: "This player was changed by another staff member. Refresh before editing."
+            }, 409);
+          }
+
+          if (dbError.code === "P0002") {
+            return json({ error: "Player not found" }, 404);
+          }
+
+          if (dbError.code === "23505") {
+            return json({
+              error: "A player with this Discord ID already exists"
+            }, 409);
+          }
+
+          if (dbError.code === "23514") {
+            return json({
+              error: "Player data failed database validation"
+            }, 400);
+          }
+
+          console.error(
+            "Player update failed:",
+            updateResponse.status,
+            dbError.code
+          );
+
+          return json({ error: "Unable to update player" }, 503);
+        }
+
+        const result = await updateResponse.json();
+
+        return json({
+          success: true,
+          player: updatedPlayer,
+          updated_at: result.updated_at
+        });
+
+      } catch (error) {
+        console.error("Player editing error:", error);
+        return json({
+          error: "Player editing temporarily unavailable"
+        }, 503);
+      }
+    }
+
         // STEP 14: Secure Player Database - read-only test
     // Secure Player Database: read and create
     if (url.pathname === "/api/players") {
