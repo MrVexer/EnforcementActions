@@ -1065,6 +1065,80 @@ if (
       } catch(error) {console.error("Staff API error",error);return json({error:"Staff service unavailable"},503)}
     }
 
+
+    // Section 6: shared staff tasks.
+    if (url.pathname === "/api/tasks" || url.pathname.startsWith("/api/tasks/")) {
+      const collection=url.pathname==="/api/tasks";
+      if (!(collection?["GET","POST"]:["PUT","DELETE"]).includes(request.method))
+        return json({error:"Method not allowed"},405);
+      try {
+        const auth=await verifyStaff(request,env);
+        if (!auth.ok) return auth;
+        const staff=await auth.json();
+        const roles=staff.roles||[];
+        const readers=["operations_manager","head_of_enforcement","enforcement_captain",
+          "enforcement_officer","trial_enforcement","support_team"];
+        const editors=["operations_manager","head_of_enforcement","enforcement_captain"];
+        const allowed=request.method==="GET"?readers:editors;
+        if (!staff.authorized || !roles.some(role=>allowed.includes(role)))
+          return json({error:"Insufficient permissions"},403);
+        if (!env.SUPABASE_SECRET_KEY) return json({error:"Database unavailable"},503);
+        const headers={apikey:env.SUPABASE_SECRET_KEY,"Content-Type":"application/json",Accept:"application/json"};
+        if (request.method==="GET") {
+          const response=await fetch(`${SUPABASE_URL}/rest/v1/vr_tasks?select=id,record,updated_at&order=updated_at.desc&limit=500`,{headers,cache:"no-store"});
+          if (!response.ok) return json({error:"Unable to load shared tasks"},503);
+          return json({success:true,tasks:await response.json()});
+        }
+        const id=collection?crypto.randomUUID():decodeURIComponent(url.pathname.slice("/api/tasks/".length));
+        const uuid=/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i;
+        if (!uuid.test(id)) return json({error:"Invalid task ID"},400);
+        const raw=await request.text();
+        if (new TextEncoder().encode(raw).length>16000) return json({error:"Request too large"},413);
+        let input;try{input=JSON.parse(raw)}catch{return json({error:"Invalid JSON"},400)}
+        if (!input || typeof input!=="object" || Array.isArray(input))return json({error:"Invalid task data"},400);
+        const expected=input.expectedUpdatedAt;
+        if (!collection && (typeof expected!=="string" || !Number.isFinite(Date.parse(expected))))
+          return json({error:"Invalid record version"},400);
+        const actor={p_actor_discord_id:staff.discordId,p_actor_username:staff.username};
+        const rpc=async(name,params)=>{
+          const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`,{
+            method:"POST",headers,body:JSON.stringify(params),cache:"no-store"});
+          if(response.ok)return json(await response.json(),request.method==="POST"?201:200);
+          const detail=await response.json().catch(()=>({}));
+          if(detail.code==="P0001")return json({error:"Task was changed by someone else. Refresh and try again."},409);
+          if(detail.code==="P0002")return json({error:detail.message||"Task or assigned staff not found"},404);
+          console.error("Task RPC failed",response.status,detail.code,detail.message);
+          return json({error:"Task database operation failed"},503);
+        };
+        if(request.method==="DELETE")return rpc("vr_archive_task",{p_id:id,...actor,p_expected_updated_at:expected});
+        const limits={title:160,description:8000,assignedTo:64,priority:20,status:30,dueDate:10};
+        const fields={};
+        for(const [key,max] of Object.entries(limits)){
+          if(typeof input[key]!=="string" || input[key].length>max)
+            return json({error:`Invalid ${key}`},400);
+          fields[key]=input[key].trim();
+        }
+        if(!fields.title)return json({error:"Task title is required"},400);
+        if(fields.assignedTo && !uuid.test(fields.assignedTo))return json({error:"Invalid assigned staff ID"},400);
+        if(!["Low","Medium","High","Critical"].includes(fields.priority))return json({error:"Invalid priority"},400);
+        if(!["To Do","In Progress","Completed"].includes(fields.status))return json({error:"Invalid status"},400);
+        if(fields.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(fields.dueDate))
+          return json({error:"Invalid due date"},400);
+        let record;
+        const now=new Date().toISOString();
+        if(collection)record={id,...fields,createdAt:now,completedAt:fields.status==="Completed"?now:null,archived:false};
+        else {
+          const response=await fetch(`${SUPABASE_URL}/rest/v1/vr_tasks?id=eq.${encodeURIComponent(id)}&select=id,record&limit=1`,{headers,cache:"no-store"});
+          if(!response.ok)return json({error:"Unable to load task"},503);
+          const rows=await response.json();
+          if(!rows.length)return json({error:"Task not found"},404);
+          record={...rows[0].record,id,...fields,completedAt:fields.status==="Completed"?(rows[0].record.completedAt||now):null};
+        }
+        return rpc(collection?"vr_create_task":"vr_update_task",{
+          p_id:id,p_record:record,...actor,...(collection?{}:{p_expected_updated_at:expected})});
+      }catch(error){console.error("Task API error",error);return json({error:"Task service unavailable"},503)}
+    }
+
     if (url.pathname.startsWith("/api/")) {
       return json(
         { error: "Endpoint not available" },
