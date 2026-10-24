@@ -12544,8 +12544,20 @@ render = function () {
     document.getElementById("subtitle").textContent =
         "Shared player records";
 
-    // Creating and editing will be connected securely later.
-    document.getElementById("add").style.display = "none";
+    // Only authorised staff can see the Create Player button.
+const canCreatePlayers =
+    window.vrStaffPermissions?.authorized === true &&
+    window.vrStaffPermissions.roles.some(role =>
+        [
+            "operations_manager",
+            "head_of_enforcement",
+            "enforcement_captain"
+        ].includes(role)
+    );
+
+const addButton = document.getElementById("add");
+
+addButton.style.display = canCreatePlayers ? "" : "none";
 
     const content = document.getElementById("content");
 
