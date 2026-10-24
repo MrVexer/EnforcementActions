@@ -501,14 +501,32 @@ export default {
 
         const staff = await authResponse.json();
 
-        if (
-          staff.authorized !== true ||
-          !staff.roles?.some(role =>
-  ["operations_manager", "head_of_enforcement"].includes(role)
-)
-        ) {
-          return json({ error: "Insufficient permissions" }, 403);
-        }
+        const canViewPlayers = staff.roles?.some(role =>
+  [
+    "operations_manager",
+    "head_of_enforcement",
+    "enforcement_captain",
+    "enforcement_officer",
+    "trial_enforcement",
+    "support_team"
+  ].includes(role)
+);
+
+const canManagePlayers = staff.roles?.some(role =>
+  [
+    "operations_manager",
+    "head_of_enforcement"
+  ].includes(role)
+);
+
+if (
+  staff.authorized !== true ||
+  (request.method === "GET"
+    ? !canViewPlayers
+    : !canManagePlayers)
+) {
+  return json({ error: "Insufficient permissions" }, 403);
+}
 
         if (!env.SUPABASE_SECRET_KEY) {
           return json({ error: "Database unavailable" }, 503);
