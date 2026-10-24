@@ -75,11 +75,17 @@ async function verifyStaff(request, env) {
 
   // Use the linked OAuth provider identity,
   // not editable profile metadata.
-  const discordIdentity = user.identities?.find(
-    identity => identity.provider === "discord"
-  );
+ const discordIdentity = user.identities?.find(
+  identity => identity.provider === "discord"
+);
 
-  const discordId = discordIdentity?.provider_id;
+const discordId = String(
+  discordIdentity?.provider_id ||
+  discordIdentity?.identity_data?.provider_id ||
+  discordIdentity?.identity_data?.sub ||
+  discordIdentity?.identity_data?.id ||
+  ""
+);
 
   if (!discordId || !/^\d{17,20}$/.test(discordId)) {
     return json({
