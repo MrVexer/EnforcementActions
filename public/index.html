@@ -14252,6 +14252,131 @@ render=function(){
 };
 render();
 
+
+// FINAL CLEANUP — ADVANCED PLAYER SEARCH USES SHARED RECORDS ONLY
+let vrAdvancedLiveVersion=0,vrAdvancedLiveQuery="",vrAdvancedLiveFilter="all";
+function vrAdvancedLiveSearch(){
+ const version=++vrAdvancedLiveVersion;
+ nav();
+ document.getElementById("title").textContent="Advanced Player Search";
+ document.getElementById("crumb").textContent="Player Search";
+ document.getElementById("subtitle").textContent="Search live player identities and linked enforcement records";
+ document.getElementById("add").style.display="none";
+ const root=document.getElementById("content");root.replaceChildren();
+ const panel=document.createElement("div");panel.className="aps-panel";
+ const heading=document.createElement("h2");heading.textContent="Advanced Player Search";
+ const intro=document.createElement("p");intro.className="muted";
+ intro.textContent="Live shared player records only — browser demonstration data is excluded.";
+ const toolbar=document.createElement("div");toolbar.className="aps-toolbar";
+ const input=document.createElement("input");input.type="search";input.placeholder="Search name, Discord ID, character or enforcement record...";
+ input.value=vrAdvancedLiveQuery;
+ const filter=document.createElement("select");
+ for(const [value,label] of [
+  ["all","All Players"],["infractions","Has Infractions"],
+  ["punishments","Has Punishments"],["appeals","Has Appeals"],
+  ["clean","No Infractions or Punishments"]
+ ]){
+  const option=document.createElement("option");option.value=value;option.textContent=label;filter.appendChild(option);
+ }
+ filter.value=vrAdvancedLiveFilter;
+ const clear=document.createElement("button");clear.type="button";clear.className="secondary";clear.textContent="Clear";
+ const refresh=document.createElement("button");refresh.type="button";refresh.className="secondary";refresh.textContent="Refresh";
+ toolbar.append(input,filter,clear,refresh);
+ const summary=document.createElement("p");summary.className="aps-summary";
+ const grid=document.createElement("div");grid.className="aps-grid";
+ summary.textContent="Loading shared player records...";
+ panel.append(heading,intro,toolbar,summary,grid);root.appendChild(panel);
+ if(!window.vrStaffPermissions?.authorized || !document.body.classList.contains("vr-workspace-authorized")){
+  summary.textContent="Sign in with an authorised staff role.";return;
+ }
+ Promise.all([
+  loadSharedPlayers(),
+  sharedPlayerRequest("/api/infractions","GET"),
+  sharedPlayerRequest("/api/punishments","GET"),
+  sharedPlayerRequest("/api/appeals","GET")
+ ]).then(([players,infractionsResponse,punishmentsResponse,appealsResponse])=>{
+  if(version!==vrAdvancedLiveVersion||page!=="playersearch"||
+   !document.body.classList.contains("vr-workspace-authorized"))return;
+  const infractions=(infractionsResponse.infractions||[]).map(row=>({...row.record,id:row.id}));
+  const punishments=(punishmentsResponse.punishments||[]).map(row=>({...row.record,id:row.id}));
+  const appeals=(appealsResponse.appeals||[]).map(row=>({...row.record,id:row.id}));
+  const element=(tag,text,cls)=>{
+   const n=document.createElement(tag);
+   if(text!==undefined)n.textContent=String(text);
+   if(cls)n.className=cls;
+   return n;
+  };
+  function paint(){
+   grid.replaceChildren();
+   const query=vrAdvancedLiveQuery.trim().toLowerCase();
+   const results=players.map(member=>{
+    const pi=infractions.filter(x=>x.player===member.id);
+    const pp=punishments.filter(x=>x.player===member.id);
+    const pa=appeals.filter(x=>x.player===member.id);
+    const history=[...pi,...pp,...pa];
+    const searchable=[
+      member.id,member.name,member.discord,member.steam,member.steamId,
+      member.characters,member.notes,
+      ...history.map(x=>Object.values(x).filter(v=>typeof v==="string"||typeof v==="number").join(" "))
+    ].join(" ").toLowerCase();
+    const filterMatch=vrAdvancedLiveFilter==="all"||
+      (vrAdvancedLiveFilter==="infractions"&&pi.length>0)||
+      (vrAdvancedLiveFilter==="punishments"&&pp.length>0)||
+      (vrAdvancedLiveFilter==="appeals"&&pa.length>0)||
+      (vrAdvancedLiveFilter==="clean"&&pi.length===0&&pp.length===0);
+    return {member,pi,pp,pa,matches:filterMatch&&(!query||searchable.includes(query))};
+   }).filter(x=>x.matches);
+   summary.textContent=`${results.length} of ${players.length} shared players found`;
+   if(!results.length){
+    grid.appendChild(element("div","No shared players match your search or filters.","aps-empty"));return;
+   }
+   for(const {member,pi,pp,pa} of results){
+    const card=element("div",undefined,"aps-card");
+    card.appendChild(element("h3",member.name||"Unnamed Player"));
+    for(const [label,value] of [
+      ["Player ID",member.id],["Discord ID",member.discord||"Not recorded"],
+      ["Characters",member.characters||"None recorded"]
+    ]){
+      const p=document.createElement("p");
+      const strong=element("strong",label+": ");p.append(strong,document.createTextNode(String(value)));
+      card.appendChild(p);
+    }
+    const counts=element("div",undefined,"aps-counts");
+    for(const [label,n] of [["Infractions",pi.length],["Punishments",pp.length],["Appeals",pa.length]]){
+      const box=element("div",undefined,"aps-count");
+      box.append(element("strong",n),element("span",label));counts.appendChild(box);
+    }
+    card.appendChild(counts);
+    const button=element("button","Open Shared Player Database →","primary");
+    button.type="button";button.onclick=()=>{
+      page="players";render();
+    };
+    card.appendChild(button);grid.appendChild(card);
+   }
+  }
+  input.oninput=()=>{vrAdvancedLiveQuery=input.value;paint()};
+  filter.onchange=()=>{vrAdvancedLiveFilter=filter.value;paint()};
+  clear.onclick=()=>{
+   vrAdvancedLiveQuery="";vrAdvancedLiveFilter="all";
+   input.value="";filter.value="all";paint();input.focus();
+  };
+  refresh.onclick=()=>render();
+  paint();
+ }).catch(error=>{
+  if(version===vrAdvancedLiveVersion&&page==="playersearch"){
+   summary.textContent="Unable to load shared player search: "+error.message;
+   grid.replaceChildren();
+  }
+ });
+}
+const vrBeforeLiveAdvancedSearch=render;
+render=function(){
+ if(page==="playersearch")return vrAdvancedLiveSearch();
+ ++vrAdvancedLiveVersion;
+ return vrBeforeLiveAdvancedSearch();
+};
+render();
+
 </script>
  </body>
 </html>
