@@ -13697,6 +13697,157 @@ render=function(){
 };
 render();
 
+
+// SECTION 6 — SHARED STAFF TASKS (Supabase, not browser demo data)
+let section6TaskVersion=0,section6TaskSearch="",section6TaskStatus="All",section6TaskAssignee="All";
+const section6Editors=["operations_manager","head_of_enforcement","enforcement_captain"];
+function section6Roles(){return window.vrStaffPermissions?.roles||[]}
+function section6CanView(){return section6Roles().some(r=>[...section6Editors,"enforcement_officer","trial_enforcement","support_team"].includes(r))}
+function section6CanEdit(){return section6Roles().some(r=>section6Editors.includes(r))}
+function section6Node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n}
+async function section6LoadStaff(){
+  const result=await sharedPlayerRequest("/api/staff","GET");
+  return (result.staff||[]).map(row=>({...row.record,id:row.id})).filter(s=>s.status!=="Archived");
+}
+async function section6Form(task,staff){
+  if(!section6CanEdit())return;
+  const editing=!!task;
+  const body=document.getElementById("modalBody");
+  body.replaceChildren();
+  document.getElementById("modalTitle").textContent=editing?"Edit Shared Task":"Create Shared Task";
+  const form=document.createElement("form");
+  const grid=section6Node("div",undefined,"formgrid"),controls={};
+  const fields=[
+    ["title","Task Title","text",task?.title||""],
+    ["description","Instructions","textarea",task?.description||""],
+    ["assignedTo","Assign To","staff",task?.assignedTo||""],
+    ["priority","Priority","select",task?.priority||"Medium",["Low","Medium","High","Critical"]],
+    ["status","Status","select",task?.status||"To Do",["To Do","In Progress","Completed"]],
+    ["dueDate","Due Date","date",task?.dueDate||""]
+  ];
+  for(const [key,label,type,value,options] of fields){
+    const field=section6Node("label",undefined,"field");
+    field.appendChild(section6Node("span",label));
+    let input;
+    if(type==="textarea")input=document.createElement("textarea");
+    else if(type==="select"||type==="staff")input=document.createElement("select");
+    else {input=document.createElement("input");input.type=type}
+    if(type==="select"){
+      for(const text of options){const opt=document.createElement("option");opt.value=text;opt.textContent=text;input.appendChild(opt)}
+    }else if(type==="staff"){
+      const blank=document.createElement("option");blank.value="";blank.textContent="Unassigned";input.appendChild(blank);
+      for(const member of staff){const opt=document.createElement("option");opt.value=member.id;opt.textContent=`${member.name} (${member.role})`;input.appendChild(opt)}
+    }
+    input.value=value;input.name=key;input.required=key==="title";controls[key]=input;field.appendChild(input);grid.appendChild(field);
+  }
+  const warning=section6Node("p","");warning.style.color="#ef4444";warning.style.display="none";
+  const actions=section6Node("div",undefined,"actions");
+  const cancel=section6Node("button","Cancel","secondary");cancel.type="button";cancel.onclick=()=>close();
+  const submit=section6Node("button",editing?"Save Changes":"Create Task","primary");submit.type="submit";
+  actions.append(cancel,submit);form.append(grid,warning,actions);body.appendChild(form);
+  document.getElementById("modalback").classList.add("show");
+  form.onsubmit=async event=>{
+    event.preventDefault();warning.style.display="none";
+    const payload={};for(const [key] of fields)payload[key]=controls[key].value.trim();
+    if(editing)payload.expectedUpdatedAt=task.updated_at;
+    submit.disabled=true;cancel.disabled=true;
+    try{
+      await sharedPlayerRequest(editing?"/api/tasks/"+encodeURIComponent(task.id):"/api/tasks",editing?"PUT":"POST",payload);
+      close();if(page==="tasks")render();
+    }catch(error){warning.textContent=error.message;warning.style.display=""}
+    finally{submit.disabled=false;cancel.disabled=false}
+  };
+}
+async function section6Archive(task){
+  if(!section6CanEdit())return;
+  if(!confirm(`Archive "${task.title}"? The record and audit history will be preserved.`))return;
+  try{
+    await sharedPlayerRequest("/api/tasks/"+encodeURIComponent(task.id),"DELETE",{expectedUpdatedAt:task.updated_at});
+    if(page==="tasks")render();
+  }catch(error){alert(error.message)}
+}
+function section6Render(){
+  const version=++section6TaskVersion;
+  document.getElementById("title").textContent="Staff Tasks";
+  document.getElementById("crumb").textContent="Staff Tasks";
+  document.getElementById("subtitle").textContent="Shared task assignments and progress";
+  const add=document.getElementById("add");if(add)add.style.display="none";
+  const content=document.getElementById("content");content.replaceChildren();
+  const section=section6Node("section",undefined,"panel");
+  const toolbar=section6Node("div",undefined,"toolbar");
+  toolbar.appendChild(section6Node("h2","Shared Task Management"));
+  const create=section6Node("button","+ Create Task","primary");
+  if(section6CanEdit()){toolbar.appendChild(create)}
+  section.appendChild(toolbar);
+  section.appendChild(section6Node("p","Tasks are saved in Supabase and shared across authorised staff.","muted"));
+  const region=section6Node("div","Loading tasks...");section.appendChild(region);content.appendChild(section);
+  if(!section6CanView()){region.textContent="You do not have permission to view shared tasks.";return}
+  Promise.all([sharedPlayerRequest("/api/tasks","GET"),section6LoadStaff()]).then(([result,staff])=>{
+    if(page!=="tasks"||version!==section6TaskVersion||!document.body.classList.contains("vr-workspace-authorized"))return;
+    const tasks=(result.tasks||[]).map(row=>({...row.record,id:row.id,updated_at:row.updated_at})).filter(t=>!t.archived);
+    const names=new Map(staff.map(s=>[s.id,s.name]));
+    create.onclick=()=>section6Form(null,staff);
+    region.replaceChildren();
+    const filters=section6Node("div",undefined,"toolbar");
+    const search=document.createElement("input");search.type="search";search.className="search";search.placeholder="Search tasks...";search.value=section6TaskSearch;
+    const status=document.createElement("select");
+    for(const value of ["All","To Do","In Progress","Completed"]){const opt=document.createElement("option");opt.value=value;opt.textContent=value;status.appendChild(opt)}
+    status.value=section6TaskStatus;
+    const assignee=document.createElement("select");
+    const all=document.createElement("option");all.value="All";all.textContent="All staff";assignee.appendChild(all);
+    for(const member of staff){const opt=document.createElement("option");opt.value=member.id;opt.textContent=member.name;assignee.appendChild(opt)}
+    assignee.value=section6TaskAssignee;
+    const refresh=section6Node("button","Refresh","secondary");refresh.onclick=()=>render();
+    filters.append(search,status,assignee,refresh);region.appendChild(filters);
+    const summary=section6Node("p",undefined,"muted");region.appendChild(summary);
+    const board=section6Node("div");board.style.display="grid";board.style.gridTemplateColumns="repeat(auto-fit,minmax(250px,1fr))";board.style.gap="16px";region.appendChild(board);
+    function paint(){
+      board.replaceChildren();
+      const filtered=tasks.filter(t=>(section6TaskStatus==="All"||t.status===section6TaskStatus)&&
+        (section6TaskAssignee==="All"||t.assignedTo===section6TaskAssignee)&&
+        [t.title,t.description,t.priority,t.status,names.get(t.assignedTo)||""].some(v=>String(v||"").toLowerCase().includes(section6TaskSearch.toLowerCase())));
+      summary.textContent=`${filtered.length} of ${tasks.length} tasks · ${tasks.filter(t=>t.status==="Completed").length} completed`;
+      for(const group of ["To Do","In Progress","Completed"]){
+        const column=section6Node("div");column.style.minWidth="0";
+        column.appendChild(section6Node("h3",`${group} (${filtered.filter(t=>t.status===group).length})`));
+        for(const task of filtered.filter(t=>t.status===group).sort((a,b)=>({Critical:4,High:3,Medium:2,Low:1}[b.priority]||0)-({Critical:4,High:3,Medium:2,Low:1}[a.priority]||0))){
+          const card=section6Node("div",undefined,"panel");card.style.marginBottom="12px";card.style.padding="14px";
+          card.appendChild(section6Node("h4",task.title));
+          card.appendChild(section6Node("p",`${task.priority} priority · ${names.get(task.assignedTo)||"Unassigned"}`,"muted"));
+          if(task.description)card.appendChild(section6Node("p",task.description));
+          const overdue=task.dueDate&&task.status!=="Completed"&&task.dueDate<new Date().toISOString().slice(0,10);
+          const due=section6Node("p",`Due: ${task.dueDate||"No deadline"}${overdue?" — OVERDUE":""}`,"muted");
+          if(overdue)due.style.color="#ef4444";card.appendChild(due);
+          if(section6CanEdit()){
+            const actions=section6Node("div",undefined,"actions");
+            const edit=section6Node("button","Edit","secondary");edit.onclick=()=>section6Form(task,staff);actions.appendChild(edit);
+            if(task.status!=="Completed"){
+              const next=section6Node("button",task.status==="To Do"?"Start":"Complete","primary");
+              next.onclick=async()=>{
+                const payload={title:task.title,description:task.description,assignedTo:task.assignedTo,priority:task.priority,
+                  status:task.status==="To Do"?"In Progress":"Completed",dueDate:task.dueDate,expectedUpdatedAt:task.updated_at};
+                try{await sharedPlayerRequest("/api/tasks/"+encodeURIComponent(task.id),"PUT",payload);render()}
+                catch(error){alert(error.message)}
+              };actions.appendChild(next);
+            }
+            const archive=section6Node("button","Archive","secondary");archive.onclick=()=>section6Archive(task);actions.appendChild(archive);
+            card.appendChild(actions);
+          }
+          column.appendChild(card);
+        }
+        board.appendChild(column);
+      }
+    }
+    search.oninput=()=>{section6TaskSearch=search.value;paint()};
+    status.onchange=()=>{section6TaskStatus=status.value;paint()};
+    assignee.onchange=()=>{section6TaskAssignee=assignee.value;paint()};
+    paint();
+  }).catch(error=>{if(version===section6TaskVersion&&page==="tasks")region.textContent="Unable to load shared tasks: "+error.message});
+}
+const section6PreviousRender=render;
+render=function(){if(page==="tasks")return section6Render();return section6PreviousRender()};
+render();
+
 </script>
  </body>
 </html>
