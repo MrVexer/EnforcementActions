@@ -285,6 +285,51 @@ export default {
 
         // STEP 19B: Secure player editing
     // PUT /api/players/{player-id}
+
+    // Audited player archive/restore/permanent delete (senior leadership only).
+    if (url.pathname.startsWith("/api/player-management/")) {
+      if (request.method!=="POST")return json({error:"Method not allowed"},405);
+      const id=decodeURIComponent(url.pathname.slice("/api/player-management/".length));
+      if(!/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i.test(id))
+        return json({error:"Invalid player ID"},400);
+      try{
+        const verified=await verifyStaff(request,env);
+        if(!verified.ok)return verified;
+        const staff=await verified.json();
+        if(!staff.authorized||!staff.roles?.some(role=>
+          ["operations_manager","head_of_enforcement"].includes(role)))
+          return json({error:"Only Operations Manager and Head of Enforcement can manage player retention"},403);
+        if(!env.SUPABASE_SECRET_KEY)return json({error:"Database unavailable"},503);
+        const raw=await request.text();
+        if(raw.length>4096)return json({error:"Request too large"},413);
+        let body;try{body=JSON.parse(raw)}catch{return json({error:"Invalid JSON"},400)}
+        if(!body||!["delete","archive","restore"].includes(body.action)||
+           typeof body.expectedUpdatedAt!=="string"||
+           !Number.isFinite(Date.parse(body.expectedUpdatedAt)))
+          return json({error:"Invalid player management request"},400);
+        const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/vr_manage_player`,{
+          method:"POST",
+          headers:{apikey:env.SUPABASE_SECRET_KEY,"Content-Type":"application/json",Accept:"application/json"},
+          body:JSON.stringify({
+            p_id:id,p_action:body.action,p_expected_updated_at:body.expectedUpdatedAt,
+            p_actor_discord_id:staff.discordId,p_actor_username:staff.username
+          }),cache:"no-store"
+        });
+        if(!response.ok){
+          const error=await response.json().catch(()=>({}));
+          if(error.code==="P0001")return json({error:"Player changed. Refresh before trying again."},409);
+          if(error.code==="P0002")return json({error:"Player not found"},404);
+          if(error.code==="P0003")return json({error:"This player has linked enforcement history. Archive the player instead."},409);
+          console.error("Player retention RPC error",response.status,error.code,error.message);
+          return json({error:"Player management database operation failed"},503);
+        }
+        return json(await response.json());
+      }catch(error){
+        console.error("Player retention service error",error);
+        return json({error:"Player management temporarily unavailable"},503);
+      }
+    }
+
     if (url.pathname.startsWith("/api/players/")) {
       if (request.method !== "PUT") {
         return json({ error: "Method not allowed" }, 405);
