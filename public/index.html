@@ -14157,6 +14157,101 @@ render=function(){
 };
 render();
 
+
+// FINAL INTEGRATION HOTFIX: Investigations board uses shared Supabase infractions.
+let vrSharedBoardSequence=0,vrSharedBoardSearch='',vrSharedBoardPriority='All',vrSharedBoardOfficer='All';
+function vrSharedBoard(){
+ const sequence=++vrSharedBoardSequence;
+ nav();
+ document.getElementById('title').textContent='Investigation Management';
+ document.getElementById('crumb').textContent='Investigations';
+ document.getElementById('subtitle').textContent='Live investigations from the shared infraction database';
+ document.getElementById('add').style.display='none';
+ const root=document.getElementById('content');root.replaceChildren();
+ const loading=vrFinalEl('div','Loading shared investigations...','panel');root.appendChild(loading);
+ if(!vrFinalRoleCheck(vrFinalReaders)){
+  loading.textContent='You do not have permission to view investigations.';return;
+ }
+ Promise.all([sharedInfractionRequest('/api/infractions'),loadSharedPlayers()]).then(([result,players])=>{
+  if(sequence!==vrSharedBoardSequence||page!=='investigations'||
+   !document.body.classList.contains('vr-workspace-authorized'))return;
+  const cases=(result.infractions||[]).map(row=>({...row.record,id:row.id,updated_at:row.updated_at}));
+  const names=new Map(players.map(item=>[item.id,item.name]));
+  root.replaceChildren();
+  const stats=vrFinalEl('div',undefined,'im-stats');
+  const stages=['Reported','Assigned','Investigating','Pending Review','Closed'];
+  const stageOf=item=>stages.includes(item.investigationStage)?item.investigationStage:
+   ['Resolved','Dismissed'].includes(item.status)?'Closed':
+   item.status==='Investigating'?'Investigating':'Reported';
+  for(const [label,number] of [
+   ['Total Cases',cases.length],
+   ['Active Investigations',cases.filter(item=>stageOf(item)!=='Closed').length],
+   ['Urgent Active Cases',cases.filter(item=>item.casePriority==='Urgent'&&stageOf(item)!=='Closed').length],
+   ['Awaiting Review',cases.filter(item=>stageOf(item)==='Pending Review').length]
+  ]){
+   const stat=vrFinalEl('div',undefined,'im-stat');stat.append(vrFinalEl('strong',number),vrFinalEl('span',label));stats.appendChild(stat);
+  }
+  root.appendChild(stats);
+  const toolbar=vrFinalEl('div',undefined,'im-toolbar');
+  const search=document.createElement('input');search.type='search';search.placeholder='Search cases, players, officers...';search.value=vrSharedBoardSearch;
+  const priority=document.createElement('select');
+  for(const value of ['All','Low','Normal','High','Urgent']){
+   const opt=document.createElement('option');opt.value=value;opt.textContent=value==='All'?'All Priorities':value;priority.appendChild(opt);
+  }
+  priority.value=vrSharedBoardPriority;
+  const officer=document.createElement('select');
+  for(const value of ['All','Unassigned',...new Set(cases.map(item=>item.assignedOfficer).filter(Boolean))]){
+   const opt=document.createElement('option');opt.value=value;opt.textContent=value==='All'?'All Officers':value;officer.appendChild(opt);
+  }
+  officer.value=vrSharedBoardOfficer;
+  const refresh=vrFinalEl('button','Refresh','secondary');refresh.onclick=()=>render();
+  toolbar.append(search,priority,officer,refresh);
+  if(sharedInfractionRole('edit')){
+   const create=vrFinalEl('button','+ New Case','primary');
+   create.onclick=()=>{page='infractions';render();openSharedInfractionForm()};toolbar.appendChild(create);
+  }
+  root.appendChild(toolbar);
+  const columns=vrFinalEl('div',undefined,'im-columns');root.appendChild(columns);
+  function paint(){
+   columns.replaceChildren();
+   const filtered=cases.filter(item=>{
+    const match=[item.id,names.get(item.player)||'',item.type,item.assignedOfficer,item.description]
+     .some(v=>String(v||'').toLowerCase().includes(vrSharedBoardSearch.toLowerCase()));
+    return match&&(vrSharedBoardPriority==='All'||(item.casePriority||'Normal')===vrSharedBoardPriority)&&
+     (vrSharedBoardOfficer==='All'||(vrSharedBoardOfficer==='Unassigned'?!item.assignedOfficer:item.assignedOfficer===vrSharedBoardOfficer));
+   });
+   for(const stage of stages){
+    const column=vrFinalEl('div',undefined,'im-column');
+    const heading=vrFinalEl('div',undefined,'im-column-head');heading.append(vrFinalEl('span',stage),vrFinalEl('span',filtered.filter(item=>stageOf(item)===stage).length,'im-column-count'));column.appendChild(heading);
+    const items=filtered.filter(item=>stageOf(item)===stage);
+    if(!items.length)column.appendChild(vrFinalEl('div','No cases','im-empty'));
+    for(const item of items){
+     const card=vrFinalEl('button',undefined,'im-card');card.type='button';
+     card.append(vrFinalEl('strong',item.id),vrFinalEl('h4',item.type||'Unspecified rule'),
+      vrFinalEl('span','Player: '+(names.get(item.player)||'Unknown player'),'im-card-meta'),
+      vrFinalEl('span','Officer: '+(item.assignedOfficer||'Unassigned'),'im-card-meta'),
+      vrFinalEl('span','Date: '+(item.date||'Not recorded'),'im-card-meta'),
+      vrFinalEl('span',(item.casePriority||'Normal')+' · '+(item.status||'Open'),'im-card-meta'));
+     card.onclick=()=>{page='infractions';render();if(sharedInfractionRole('edit'))openSharedInfractionForm(item)};
+     column.appendChild(card);
+    }
+    columns.appendChild(column);
+   }
+  }
+  search.oninput=()=>{vrSharedBoardSearch=search.value;paint()};
+  priority.onchange=()=>{vrSharedBoardPriority=priority.value;paint()};
+  officer.onchange=()=>{vrSharedBoardOfficer=officer.value;paint()};
+  paint();
+ }).catch(error=>{if(sequence===vrSharedBoardSequence&&page==='investigations')loading.textContent='Unable to load investigations: '+error.message});
+}
+const vrBeforeSharedBoardRender=render;
+render=function(){
+ if(page==='investigations')return vrSharedBoard();
+ ++vrSharedBoardSequence;
+ return vrBeforeSharedBoardRender();
+};
+render();
+
 </script>
  </body>
 </html>
