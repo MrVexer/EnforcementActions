@@ -193,6 +193,96 @@ export default {
       }
     }
 
+        // Protected, read-only database connection test.
+    if (url.pathname === "/api/db/status") {
+      if (request.method !== "GET") {
+        return json(
+          { error: "Method not allowed" },
+          405
+        );
+      }
+
+      // Reuse our existing server-side Discord
+      // identity and staff role verification.
+      let verificationResponse;
+
+      try {
+        verificationResponse = await verifyStaff(request, env);
+      } catch (error) {
+        console.error("Authentication error:", error);
+
+        return json({
+          authorized: false,
+          error: "Authentication unavailable"
+        }, 503);
+      }
+
+      if (!verificationResponse.ok) {
+        return verificationResponse;
+      }
+
+      const verification =
+        await verificationResponse.json();
+
+      if (verification.authorized !== true) {
+        return json({
+          authorized: false,
+          error: "Access denied"
+        }, 403);
+      }
+
+      if (!env.SUPABASE_SECRET_KEY) {
+        return json({
+          error: "Database configuration unavailable"
+        }, 503);
+      }
+
+      try {
+        // Request zero records: tests the database
+        // connection without returning player data.
+        const dbResponse = await fetch(
+          `${SUPABASE_URL}/rest/v1/vr_players?select=id&limit=0`,
+          {
+            method: "GET",
+            headers: {
+              "apikey": env.SUPABASE_SECRET_KEY,
+              "Accept": "application/json"
+            },
+            cache: "no-store"
+          }
+        );
+
+        if (!dbResponse.ok) {
+          console.error(
+            "Supabase connection failed:",
+            dbResponse.status
+          );
+
+          return json({
+            authorized: true,
+            database: "error",
+            error: "Database connection failed"
+          }, 503);
+        }
+
+        return json({
+          authorized: true,
+          database: "connected",
+          role: verification.primaryRole,
+          message: "Protected database connection successful"
+        });
+
+      } catch (error) {
+        console.error("Database request error:", error);
+
+        return json({
+          authorized: true,
+          database: "error",
+          error: "Database unavailable"
+        }, 503);
+      }
+    }
+
     if (url.pathname.startsWith("/api/")) {
       return json(
         { error: "Endpoint not available" },
