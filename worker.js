@@ -284,22 +284,19 @@ export default {
     }
 
         // STEP 14: Secure Player Database - read-only test
+    // Secure Player Database: read and create
     if (url.pathname === "/api/players") {
-      if (request.method !== "GET") {
+      if (!["GET", "POST"].includes(request.method)) {
         return json({ error: "Method not allowed" }, 405);
       }
 
       try {
         const authResponse = await verifyStaff(request, env);
 
-        if (!authResponse.ok) {
-          return authResponse;
-        }
+        if (!authResponse.ok) return authResponse;
 
         const staff = await authResponse.json();
 
-        // Temporary strict permission:
-        // Operations Managers only.
         if (
           staff.authorized !== true ||
           !staff.roles?.includes("operations_manager")
@@ -311,33 +308,152 @@ export default {
           return json({ error: "Database unavailable" }, 503);
         }
 
+        const dbHeaders = {
+          apikey: env.SUPABASE_SECRET_KEY,
+          "Content-Type": "application/json",
+          Accept: "application/json"
+        };
+
+        if (request.method === "GET") {
+          const response = await fetch(
+            `${SUPABASE_URL}/rest/v1/vr_players?select=id,record,updated_at&order=updated_at.desc&limit=50`,
+            {
+              headers: dbHeaders,
+              cache: "no-store"
+            }
+          );
+
+          if (!response.ok) {
+            console.error("Player read failed:", response.status);
+            return json({ error: "Unable to load players" }, 503);
+          }
+
+          const players = await response.json();
+
+          return json({
+            success: true,
+            players,
+            count: players.length
+          });
+        }
+
+        // POST: create a player
+        const contentLength = Number(
+          request.headers.get("Content-Length") || 0
+        );
+
+        if (contentLength > 16384) {
+          return json({ error: "Request too large" }, 413);
+        }
+
+        const rawBody = await request.text();
+
+        if (rawBody.length > 16384) {
+          return json({ error: "Request too large" }, 413);
+        }
+
+        let input;
+
+        try {
+          input = JSON.parse(rawBody);
+        } catch {
+          return json({ error: "Invalid JSON" }, 400);
+        }
+
+        if (
+          !input ||
+          typeof input !== "object" ||
+          Array.isArray(input)
+        ) {
+          return json({ error: "Invalid player data" }, 400);
+        }
+
+        const name =
+          typeof input.name === "string"
+            ? input.name.trim()
+            : "";
+
+        const discord =
+          typeof input.discord === "string"
+            ? input.discord.trim()
+            : "";
+
+        const characters =
+          typeof input.characters === "string"
+            ? input.characters.trim()
+            : "";
+
+        const notes =
+          typeof input.notes === "string"
+            ? input.notes.trim()
+            : "";
+
+        if (!name || name.length > 100) {
+          return json({ error: "Invalid player name" }, 400);
+        }
+
+        if (
+          discord &&
+          !/^[0-9]{17,20}$/.test(discord)
+        ) {
+          return json({ error: "Invalid Discord ID" }, 400);
+        }
+
+        if (characters.length > 2000 || notes.length > 5000) {
+          return json({ error: "Player details too long" }, 400);
+        }
+
+        const playerId = crypto.randomUUID();
+
+        const player = {
+          id: playerId,
+          name,
+          discord,
+          characters,
+          notes,
+          createdAt: new Date().toISOString()
+        };
+
         const response = await fetch(
-          `${SUPABASE_URL}/rest/v1/vr_players?select=id,record,updated_at&order=updated_at.desc&limit=50`,
+          `${SUPABASE_URL}/rest/v1/rpc/vr_create_player`,
           {
-            headers: {
-              apikey: env.SUPABASE_SECRET_KEY,
-              Accept: "application/json"
-            },
+            method: "POST",
+            headers: dbHeaders,
+            body: JSON.stringify({
+              p_id: playerId,
+              p_record: player,
+              p_actor_discord_id: staff.discordId,
+              p_actor_username: staff.username
+            }),
             cache: "no-store"
           }
         );
 
         if (!response.ok) {
-          console.error("Player database error:", response.status);
-          return json({ error: "Unable to load players" }, 503);
-        }
+          const errorText = await response.text();
 
-        const players = await response.json();
+          // PostgreSQL unique constraint violation.
+          if (errorText.includes('"23505"')) {
+            return json({
+              error: "A player with this Discord ID already exists"
+            }, 409);
+          }
+
+          console.error("Player creation failed:", response.status);
+          return json({ error: "Unable to create player" }, 503);
+        }
 
         return json({
           success: true,
-          players,
-          count: players.length
-        });
+          player
+        }, 201);
 
       } catch (error) {
-        console.error("Player endpoint error:", error);
-        return json({ error: "Service unavailable" }, 503);
+        console.error("Player API error:", error);
+
+        return json({
+          error: "Player Database temporarily unavailable"
+        }, 503);
       }
     }
 
