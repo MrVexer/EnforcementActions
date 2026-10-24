@@ -3755,12 +3755,25 @@ body.vr-workspace-authorized #vr-auth-screen {
 
     let updateCounter = 0;
 
+// Store verified staff permissions for interface controls.
+window.vrStaffPermissions = {
+  authorized: false,
+  roles: []
+};
+
 // Workspace visibility is controlled by the login verification process.
 function setWorkspaceAccess(authorized) {
   document.body.classList.toggle(
     "vr-workspace-authorized",
     authorized === true
   );
+
+  if (authorized !== true) {
+    window.vrStaffPermissions = {
+      authorized: false,
+      roles: []
+    };
+  }
 }
 
     async function updateLoginState() {
@@ -3802,7 +3815,14 @@ function setWorkspaceAccess(authorized) {
         if (currentUpdate !== updateCounter) return;
 
         if (verification.authorized === true) {
-          const roleName = verification.primaryRole
+  window.vrStaffPermissions = {
+    authorized: true,
+    roles: Array.isArray(verification.roles)
+      ? verification.roles
+      : []
+  };
+
+  const roleName = verification.primaryRole
             .replaceAll("_", " ")
             .replace(/\b\w/g, letter => letter.toUpperCase());
 
