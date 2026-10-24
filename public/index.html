@@ -13991,6 +13991,172 @@ const section7PreviousRender=render;
 render=function(){if(page==="docs")return section7Render();return section7PreviousRender()};
 render();
 
+
+// ============================================================
+// FINAL INTEGRATION — LIVE OVERVIEW + VERIFIED AUDIT HISTORY
+// All values come from Worker/Supabase, never from demo storage.
+// ============================================================
+let vrFinalRenderSequence=0;
+let vrFinalAuditSearch="";
+function vrFinalEl(tag,value,className){
+  const el=document.createElement(tag);
+  if(value!==undefined)el.textContent=String(value);
+  if(className)el.className=className;
+  return el;
+}
+function vrFinalRoleCheck(roles){
+  const actual=window.vrStaffPermissions?.roles||[];
+  return window.vrStaffPermissions?.authorized===true&&actual.some(r=>roles.includes(r));
+}
+const vrFinalReaders=["operations_manager","head_of_enforcement","enforcement_captain",
+  "enforcement_officer","trial_enforcement","support_team"];
+const vrFinalManagers=["operations_manager","head_of_enforcement","enforcement_captain"];
+function vrFinalDashboard(){
+  const version=++vrFinalRenderSequence;
+  const root=document.getElementById("content");
+  root.replaceChildren();
+  document.getElementById("title").textContent="Overview";
+  document.getElementById("crumb").textContent="Overview";
+  document.getElementById("subtitle").textContent="Live enforcement data from Supabase";
+  document.getElementById("add").style.display="none";
+  const header=vrFinalEl("div",undefined,"workspace-intro");
+  const inner=vrFinalEl("div");
+  inner.append(vrFinalEl("h2","Enforcement Command Centre"),
+    vrFinalEl("p","Live shared records. No demonstration figures."));
+  header.appendChild(inner);
+  const refresh=vrFinalEl("button","Refresh","secondary");
+  refresh.onclick=()=>render();
+  header.appendChild(refresh);root.appendChild(header);
+  const loading=vrFinalEl("p","Loading live records...","muted");
+  root.appendChild(loading);
+  if(!vrFinalRoleCheck(vrFinalReaders)){
+    loading.textContent="Sign in with an authorised Discord staff role to view the dashboard.";
+    return;
+  }
+  sharedPlayerRequest("/api/integration/overview","GET").then(result=>{
+    if(version!==vrFinalRenderSequence||page!=="overview"||
+       !document.body.classList.contains("vr-workspace-authorized"))return;
+    loading.remove();
+    const c=result.counts||{};
+    const stats=vrFinalEl("div",undefined,"stats");
+    for(const [label,key] of [
+      ["Players","players"],["Infractions","infractions"],
+      ["Open investigations","openInfractions"],["Active punishments","activePunishments"],
+      ["Pending appeals","pendingAppeals"],["Outstanding tasks","outstandingTasks"],
+      ["Staff","staff"],["Documents","documents"]
+    ]){
+      const tile=vrFinalEl("div",undefined,"stat");
+      tile.append(vrFinalEl("span",label),vrFinalEl("strong",c[key]??0));
+      stats.appendChild(tile);
+    }
+    root.appendChild(stats);
+    const panel=vrFinalEl("div",undefined,"panel");
+    panel.appendChild(vrFinalEl("h2","Recent Infractions"));
+    const rows=result.recentInfractions||[];
+    if(!rows.length)panel.appendChild(vrFinalEl("p","No shared infractions have been recorded.","muted"));
+    else{
+      const wrapper=vrFinalEl("div",undefined,"tablewrap");
+      const table=document.createElement("table");
+      const head=document.createElement("thead"),tr=document.createElement("tr");
+      for(const name of ["Player","Rule violated","Status","Incident date"]){
+        tr.appendChild(vrFinalEl("th",name));
+      }
+      head.appendChild(tr);table.appendChild(head);
+      const body=document.createElement("tbody");
+      for(const item of rows){
+        const row=document.createElement("tr");
+        for(const value of [item.playerName,item.type,item.status,item.date]){
+          row.appendChild(vrFinalEl("td",value||"—"));
+        }
+        body.appendChild(row);
+      }
+      table.appendChild(body);wrapper.appendChild(table);panel.appendChild(wrapper);
+    }
+    root.appendChild(panel);
+    root.appendChild(vrFinalEl("p",
+      "Statistics cover up to "+(result.limitedTo||500)+" latest records per category. Large datasets require pagination for exact totals.",
+      "muted"));
+  }).catch(error=>{
+    if(version===vrFinalRenderSequence&&page==="overview")
+      loading.textContent="Unable to load live dashboard: "+error.message;
+  });
+}
+function vrFinalAudit(){
+  const version=++vrFinalRenderSequence;
+  const root=document.getElementById("content");
+  root.replaceChildren();
+  document.getElementById("title").textContent="Audit History";
+  document.getElementById("crumb").textContent="Audit History";
+  document.getElementById("subtitle").textContent="Read-only, server-verified change history";
+  document.getElementById("add").style.display="none";
+  if(!vrFinalRoleCheck(vrFinalManagers)){
+    root.appendChild(vrFinalEl("p","Audit history is restricted to Enforcement Captains and higher.","muted"));
+    return;
+  }
+  const panel=vrFinalEl("div",undefined,"panel");
+  panel.appendChild(vrFinalEl("h2","Recent Staff Actions"));
+  const toolbar=vrFinalEl("div",undefined,"toolbar");
+  const search=document.createElement("input");search.type="search";search.className="search";
+  search.placeholder="Search actor, action or record";search.value=vrFinalAuditSearch;
+  const refresh=vrFinalEl("button","Refresh","secondary");refresh.onclick=()=>render();
+  toolbar.append(search,refresh);panel.appendChild(toolbar);
+  const region=vrFinalEl("p","Loading audit events...","muted");panel.appendChild(region);
+  root.appendChild(panel);
+  sharedPlayerRequest("/api/integration/audit","GET").then(result=>{
+    if(version!==vrFinalRenderSequence||page!=="activity"||
+       !document.body.classList.contains("vr-workspace-authorized"))return;
+    const events=result.events||[];
+    function paint(){
+      region.replaceChildren();
+      const filtered=events.filter(item=>{
+        const r=item.record||{};
+        return [r.action,r.targetType,r.targetId,r.actorUsername,r.actorDiscordId]
+          .some(value=>String(value||"").toLowerCase().includes(vrFinalAuditSearch.toLowerCase()));
+      });
+      region.appendChild(vrFinalEl("p",`${filtered.length} of ${events.length} recent events`,"muted"));
+      const wrapper=vrFinalEl("div",undefined,"tablewrap");
+      const table=document.createElement("table");
+      const head=document.createElement("thead"),hrow=document.createElement("tr");
+      for(const label of ["When","Staff member","Action","Record type","Record ID"])
+        hrow.appendChild(vrFinalEl("th",label));
+      head.appendChild(hrow);table.appendChild(head);
+      const body=document.createElement("tbody");
+      for(const item of filtered){
+        const r=item.record||{};
+        const tr=document.createElement("tr");
+        const date=new Date(r.timestamp||item.updated_at);
+        const when=Number.isNaN(date.getTime())?"Unknown":date.toLocaleString();
+        for(const value of [when,r.actorUsername,r.action,r.targetType,r.targetId])
+          tr.appendChild(vrFinalEl("td",value||"—"));
+        body.appendChild(tr);
+      }
+      table.appendChild(body);wrapper.appendChild(table);region.appendChild(wrapper);
+    }
+    search.oninput=()=>{vrFinalAuditSearch=search.value;paint()};
+    paint();
+  }).catch(error=>{
+    if(version===vrFinalRenderSequence&&page==="activity")
+      region.textContent="Unable to load audit events: "+error.message;
+  });
+}
+const vrFinalPreviousRender=render;
+render=function(){
+  // Ensure dashboard/audit never show the browser's legacy demo data.
+  if(page==="overview"){
+    nav();
+    vrFinalDashboard();
+    return;
+  }
+  if(page==="activity"){
+    nav();
+    vrFinalAudit();
+    return;
+  }
+  ++vrFinalRenderSequence;
+  return vrFinalPreviousRender();
+};
+render();
+
 </script>
  </body>
 </html>
