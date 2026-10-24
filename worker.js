@@ -309,7 +309,7 @@ export default {
         if (
           staff.authorized !== true ||
           !staff.roles?.some(role =>
-  ["operations_manager", "head_of_enforcement"].includes(role)
+  ["operations_manager", "head_of_enforcement", "enforcement_captain"].includes(role)
 )
         ) {
           return json({ error: "Insufficient permissions" }, 403);
@@ -515,7 +515,8 @@ export default {
 const canManagePlayers = staff.roles?.some(role =>
   [
     "operations_manager",
-    "head_of_enforcement"
+    "head_of_enforcement",
+    "enforcement_captain"
   ].includes(role)
 );
 
