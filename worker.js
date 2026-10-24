@@ -1220,6 +1220,87 @@ if (
       }catch(error){console.error("Document API error",error);return json({error:"Document service unavailable"},503)}
     }
 
+
+    // FINAL INTEGRATION: read-only dashboard and audit feeds.
+    // Each dataset is independently authorized; unauthorized sections are not queried.
+    if (url.pathname === "/api/integration/overview" || url.pathname === "/api/integration/audit") {
+      if (request.method !== "GET") return json({error:"Method not allowed"},405);
+      try {
+        const verified=await verifyStaff(request,env);
+        if (!verified.ok) return verified;
+        const staff=await verified.json();
+        const roles=staff.roles||[];
+        const readers=["operations_manager","head_of_enforcement","enforcement_captain",
+          "enforcement_officer","trial_enforcement","support_team"];
+        const isReader=roles.some(r=>readers.includes(r));
+        const isManager=roles.some(r=>["operations_manager","head_of_enforcement","enforcement_captain"].includes(r));
+        if (!staff.authorized || !isReader) return json({error:"Insufficient permissions"},403);
+        if (!env.SUPABASE_SECRET_KEY) return json({error:"Database unavailable"},503);
+        const headers={apikey:env.SUPABASE_SECRET_KEY,Accept:"application/json"};
+        const getRows=async(table,limit=500)=>{
+          const response=await fetch(
+            `${SUPABASE_URL}/rest/v1/${table}?select=id,record,updated_at&order=updated_at.desc&limit=${limit}`,
+            {headers,cache:"no-store"}
+          );
+          if (!response.ok) throw Error(`Unable to load ${table}: ${response.status}`);
+          return response.json();
+        };
+        if (url.pathname.endsWith("/audit")) {
+          // Audit events contain internal actor information and historical snapshots.
+          if (!isManager) return json({error:"Insufficient permissions for audit history"},403);
+          const rows=await getRows("vr_audit_events",150);
+          return json({success:true,events:rows.map(row=>({
+            id:row.id,updated_at:row.updated_at,record:{
+              action:String(row.record?.action||"Unknown"),
+              targetType:String(row.record?.targetType||""),
+              targetId:String(row.record?.targetId||""),
+              actorUsername:String(row.record?.actorUsername||"Unknown"),
+              actorDiscordId:String(row.record?.actorDiscordId||""),
+              timestamp:row.record?.timestamp||row.updated_at
+            }
+          }))});
+        }
+        const datasets=[
+          ["players","vr_players"],
+          ["infractions","vr_infractions"],
+          ["punishments","vr_punishments"],
+          ["appeals","vr_appeals"],
+          ["tasks","vr_tasks"],
+          ["documents","vr_documents"],
+          ["staff","vr_staff"]
+        ];
+        const results=await Promise.all(datasets.map(async([key,table])=>[key,await getRows(table)]));
+        const entries=Object.fromEntries(results);
+        const rows=key=>entries[key].map(r=>({...r.record,id:r.id,updated_at:r.updated_at}));
+        const players=rows("players"),infractions=rows("infractions"),punishments=rows("punishments"),
+          appeals=rows("appeals"),tasks=rows("tasks"),documents=rows("documents"),staffRows=rows("staff");
+        const recent=infractions.slice().sort((a,b)=>
+          String(b.createdAt||b.date||b.updated_at).localeCompare(String(a.createdAt||a.date||a.updated_at))
+        ).slice(0,8).map(i=>({
+          id:i.id,playerId:i.player,type:String(i.type||""),status:String(i.status||""),
+          date:String(i.date||i.createdAt||"")
+        }));
+        const playerNames=Object.fromEntries(players.map(p=>[p.id,String(p.name||"Unknown player")]));
+        return json({success:true,
+          // Counts represent records returned by the capped query (not an uncapped database total).
+          limitedTo:500,
+          counts:{
+            players:players.length,infractions:infractions.length,punishments:punishments.length,
+            appeals:appeals.length,staff:staffRows.filter(x=>x.status!=="Archived").length,
+            tasks:tasks.filter(x=>!x.archived).length,documents:documents.filter(x=>x.status!=="Archived").length,
+            openInfractions:infractions.filter(x=>["Open","Investigating"].includes(x.status)).length,
+            activePunishments:punishments.filter(x=>x.status==="Active").length,
+            pendingAppeals:appeals.filter(x=>["Pending","Under Review"].includes(x.status)).length,
+            outstandingTasks:tasks.filter(x=>!x.archived&&x.status!=="Completed").length
+          },
+          recentInfractions:recent.map(i=>({...i,playerName:playerNames[i.playerId]||"Unknown player"}))
+        });
+      } catch(error) {
+        console.error("Integration API error",error);
+        return json({error:"Unable to load live workspace data"},503);
+      }
+    }
+
     if (url.pathname.startsWith("/api/")) {
       return json(
         { error: "Endpoint not available" },
