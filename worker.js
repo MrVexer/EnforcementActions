@@ -818,6 +818,98 @@ if (
       }
     }
 
+    // Section 3: shared punishments with server-side role enforcement.
+    if (url.pathname === "/api/punishments" || url.pathname.startsWith("/api/punishments/")) {
+      const collection=url.pathname==="/api/punishments";
+      if (!(collection ? ["GET","POST"] : ["PUT","DELETE"]).includes(request.method))
+        return json({error:"Method not allowed"},405);
+      try {
+        const verified=await verifyStaff(request,env);
+        if (!verified.ok) return verified;
+        const staff=await verified.json();
+        const roles=staff.roles||[];
+        const managers=["operations_manager","head_of_enforcement"];
+        const editors=[...managers,"enforcement_captain","enforcement_officer"];
+        const readers=[...editors,"trial_enforcement","support_team"];
+        const permitted=request.method==="GET"?readers:request.method==="DELETE"?managers:editors;
+        if (!staff.authorized || !roles.some(r=>permitted.includes(r)))
+          return json({error:"Insufficient permissions"},403);
+        if (!env.SUPABASE_SECRET_KEY) return json({error:"Database unavailable"},503);
+        const headers={apikey:env.SUPABASE_SECRET_KEY,"Content-Type":"application/json",Accept:"application/json"};
+        if (request.method==="GET") {
+          const result=await fetch(`${SUPABASE_URL}/rest/v1/vr_punishments?select=id,record,updated_at&order=updated_at.desc&limit=200`,{headers,cache:"no-store"});
+          if (!result.ok) return json({error:"Unable to load punishments"},503);
+          return json({success:true,punishments:await result.json()});
+        }
+        const id=collection?crypto.randomUUID():decodeURIComponent(url.pathname.slice("/api/punishments/".length));
+        if (!/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i.test(id)) return json({error:"Invalid punishment ID"},400);
+        const raw=await request.text();
+        if (new TextEncoder().encode(raw).length>32768) return json({error:"Request too large"},413);
+        let input;
+        try {input=JSON.parse(raw)} catch {return json({error:"Invalid JSON"},400)}
+        if (!input || typeof input!=="object" || Array.isArray(input)) return json({error:"Invalid payload"},400);
+        const expected=input.expectedUpdatedAt;
+        if (!collection && (typeof expected!=="string" || !/^\d{4}-\d{2}-\d{2}T/.test(expected) || !Number.isFinite(Date.parse(expected))))
+          return json({error:"Invalid record version"},400);
+        const dbError=async response=>{
+          const detail=await response.json().catch(()=>({}));
+          if (detail.code==="P0001") return json({error:"This punishment changed. Refresh before editing."},409);
+          if (detail.code==="P0002") return json({error:detail.message||"Linked record not found"},404);
+          if (detail.code==="P0003") return json({error:"Linked appeals prevent deletion"},409);
+          console.error("Punishment RPC failed",response.status,detail.code);
+          return json({error:"Punishment database operation failed"},503);
+        };
+        const rpc=async(name,params)=>{
+          const result=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`,{
+            method:"POST",headers,body:JSON.stringify(params),cache:"no-store"
+          });
+          return result.ok?json(await result.json(),request.method==="POST"?201:200):dbError(result);
+        };
+        const actor={p_actor_discord_id:staff.discordId,p_actor_username:staff.username};
+        if (request.method==="DELETE") return rpc("vr_delete_punishment",{
+          p_id:id,...actor,p_expected_updated_at:expected
+        });
+        const limits={player:64,infraction:64,action:30,duration:150,expiresAt:10,
+          status:20,officer:120,date:10,notes:8000};
+        const fields={};
+        for (const [key,max] of Object.entries(limits)) {
+          if (typeof input[key]!=="string") return json({error:`Invalid ${key}`},400);
+          fields[key]=input[key].trim();
+          if (fields[key].length>max) return json({error:`Field too long: ${key}`},400);
+        }
+        const uuid=/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i;
+        if (!uuid.test(fields.player) || (fields.infraction && !uuid.test(fields.infraction)))
+          return json({error:"Choose a valid shared player and infraction"},400);
+        if (!["Verbal Warning","Written Warning","Kick","Temporary Ban","Permanent Ban"].includes(fields.action))
+          return json({error:"Invalid punishment action"},400);
+        if (!["Active","Expired","Revoked"].includes(fields.status)) return json({error:"Invalid status"},400);
+        if (!fields.notes) return json({error:"Reason / notes is required"},400);
+        for (const key of ["date","expiresAt"])
+          if (fields[key] && !/^\d{4}-\d{2}-\d{2}$/.test(fields[key])) return json({error:`Invalid ${key}`},400);
+        if (fields.action==="Temporary Ban" && (!fields.expiresAt || !fields.date || fields.expiresAt<=fields.date))
+          return json({error:"Temporary bans require an expiry date after the issue date"},400);
+        if (fields.action!=="Temporary Ban" && fields.expiresAt)
+          return json({error:"Only temporary bans can have an expiry date"},400);
+        if (!fields.date) return json({error:"Issue date is required"},400);
+        let record;
+        if (collection) {
+          record={id,...fields,createdAt:new Date().toISOString()};
+        } else {
+          const response=await fetch(`${SUPABASE_URL}/rest/v1/vr_punishments?id=eq.${encodeURIComponent(id)}&select=id,record&limit=1`,{headers,cache:"no-store"});
+          if (!response.ok) return json({error:"Unable to load punishment"},503);
+          const rows=await response.json();
+          if (!rows.length) return json({error:"Punishment not found"},404);
+          record={...rows[0].record,id,...fields};
+        }
+        return rpc(collection?"vr_create_punishment":"vr_update_punishment",{
+          p_id:id,p_record:record,...actor,...(collection?{}:{p_expected_updated_at:expected})
+        });
+      } catch(error) {
+        console.error("Punishment API failure",error);
+        return json({error:"Punishment service unavailable"},503);
+      }
+    }
+
     if (url.pathname.startsWith("/api/")) {
       return json(
         { error: "Endpoint not available" },
