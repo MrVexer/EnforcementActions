@@ -3593,6 +3593,199 @@
     </div>
    </div>
   </div>
+  <!-- Vengeful Realms Discord authentication -->
+<style>
+  body > aside,
+  body > main,
+  body > .modalback {
+    display: none !important;
+  }
+
+  #vr-auth-screen {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: #0d0d0f;
+  }
+
+  .vr-auth-card {
+    width: min(440px, 100%);
+    background: #1b1b1e;
+    border: 1px solid #59303b;
+    border-radius: 16px;
+    padding: 36px;
+    text-align: center;
+  }
+
+  .vr-auth-card h1 {
+    font-size: 25px;
+    margin-bottom: 12px;
+  }
+
+  .vr-auth-card p {
+    color: #b9adb4;
+    line-height: 1.7;
+  }
+
+  .vr-auth-button {
+    width: 100%;
+    margin-top: 20px;
+    padding: 14px;
+    border: 0;
+    border-radius: 8px;
+    background: #5865f2;
+    color: white;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .vr-auth-button:disabled {
+    opacity: .6;
+    cursor: wait;
+  }
+
+  #vr-auth-message {
+    margin-top: 18px;
+    color: #f2b0bd;
+    overflow-wrap: anywhere;
+  }
+</style>
+
+<section id="vr-auth-screen">
+  <div class="vr-auth-card">
+    <h1>Vengeful Realms</h1>
+    <h2>Enforcement Workspace</h2>
+
+    <p id="vr-auth-description">
+      Sign in with Discord to verify your identity.
+    </p>
+
+    <button
+      id="vr-discord-login"
+      class="vr-auth-button"
+      type="button"
+      disabled
+    >
+      Connecting...
+    </button>
+
+    <button
+      id="vr-discord-logout"
+      class="secondary"
+      type="button"
+      hidden
+      style="margin-top: 14px;"
+    >
+      Sign out
+    </button>
+
+    <p id="vr-auth-message"></p>
+  </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+<script>
+  (async function () {
+    const projectUrl =
+      "https://jhkvaxvqfoqvihnkqkxz.supabase.co";
+
+    const publishableKey =
+      "sb_publishable_rDmQRDZFbzczUCSvy4KutQ_FA9csd6I";
+
+    const loginButton =
+      document.getElementById("vr-discord-login");
+
+    const logoutButton =
+      document.getElementById("vr-discord-logout");
+
+    const description =
+      document.getElementById("vr-auth-description");
+
+    const message =
+      document.getElementById("vr-auth-message");
+
+    if (!window.supabase?.createClient) {
+      loginButton.textContent = "Authentication unavailable";
+      message.textContent =
+        "Unable to load the authentication library.";
+      return;
+    }
+
+    const client = window.supabase.createClient(
+      projectUrl,
+      publishableKey
+    );
+
+    async function updateLoginState() {
+      const { data, error } =
+        await client.auth.getUser();
+
+      if (error && !data?.user) {
+        message.textContent = "";
+      }
+
+      if (data?.user) {
+        description.textContent =
+          "Signed in as " +
+          (data.user.user_metadata?.full_name ||
+           data.user.email ||
+           "Discord user");
+
+        loginButton.hidden = true;
+        logoutButton.hidden = false;
+
+        message.textContent =
+          "Identity verified. Staff access is not yet enabled. " +
+          "Server-side Discord role verification is required.";
+      } else {
+        description.textContent =
+          "Sign in with Discord to verify your identity.";
+
+        loginButton.hidden = false;
+        loginButton.disabled = false;
+        loginButton.textContent = "Login with Discord";
+        logoutButton.hidden = true;
+      }
+    }
+
+    loginButton.addEventListener("click", async () => {
+      loginButton.disabled = true;
+      loginButton.textContent = "Redirecting...";
+
+      const { error } = await client.auth.signInWithOAuth({
+        provider: "discord",
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
+
+      if (error) {
+        message.textContent = error.message;
+        loginButton.disabled = false;
+        loginButton.textContent = "Login with Discord";
+      }
+    });
+
+    logoutButton.addEventListener("click", async () => {
+      const { error } = await client.auth.signOut();
+
+      if (error) {
+        message.textContent = error.message;
+        return;
+      }
+
+      await updateLoginState();
+    });
+
+    client.auth.onAuthStateChange(() => {
+      updateLoginState();
+    });
+
+    await updateLoginState();
+  })();
+</script>
   <script>
  
     
