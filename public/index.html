@@ -3993,6 +3993,75 @@ ICON.playersearch = '⌕';
    let page='overview',filter='',statusFilter='All',viewMode='table';const storeKey='vr_workspace_demo_v1';const demo={players:[{id:'P-001',name:'ExamplePlayer',discord:'000000000000000001',characters:'Vekor, Torin',notes:'Demo player profile'},{id:'P-002',name:'NordicExample',discord:'000000000000000002',characters:'Haldor',notes:'Demo player profile'}],infractions:[{id:'INF-001',player:'P-001',type:'Metagaming',severity:'Moderate',date:'2026-10-18',officer:'Example Officer',status:'Resolved',description:'Illustrative incident only',evidence:''},{id:'INF-002',player:'P-002',type:'FailRP',severity:'Low',date:'2026-10-17',officer:'Example Officer',status:'Open',description:'Illustrative incident only',evidence:''}],punishments:[{id:'PUN-001',player:'P-001',infraction:'INF-001',action:'Warning',duration:'N/A',status:'Active',officer:'Example Officer',date:'2026-10-18',notes:'Demo punishment'}],appeals:[{id:'APP-001',punishment:'PUN-001',player:'P-001',status:'Pending',reviewer:'',reason:'Illustrative appeal request',decision:''}],activity:[]};let data;try{data=JSON.parse(localStorage.getItem(storeKey))||structuredClone(demo)}catch{data=structuredClone(demo)};
     
     function save(){localStorage.setItem(storeKey,JSON.stringify(data))}
+
+       // ==========================================
+    // SHARED PLAYER DATABASE - READ ONLY
+    // ==========================================
+
+    async function loadSharedPlayers() {
+        const authStorageKey =
+            "sb-jhkvaxvqfoqvihnkqkxz-auth-token";
+
+        const session = JSON.parse(
+            localStorage.getItem(authStorageKey) || "null"
+        );
+
+        if (!session?.access_token) {
+            throw new Error("Please sign in with Discord first.");
+        }
+
+        const response = await fetch("/api/players", {
+            method: "GET",
+            headers: {
+                Authorization: `Bearer ${session.access_token}`
+            },
+            cache: "no-store"
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || result.success !== true) {
+            throw new Error(
+                result.error || "Unable to load shared players."
+            );
+        }
+
+        if (!Array.isArray(result.players)) {
+            throw new Error("Invalid Player Database response.");
+        }
+
+        return result.players.map(item => ({
+            ...item.record,
+            id: item.id,
+            updated_at: item.updated_at
+        }));
+    }
+
+    // Temporary read-only testing function.
+    window.testSharedPlayers = async function () {
+        try {
+            const players = await loadSharedPlayers();
+
+            console.table(
+                players.map(p => ({
+                    id: p.id,
+                    name: p.name,
+                    discord: p.discord,
+                    updated_at: p.updated_at
+                }))
+            );
+
+            console.log(
+                "PASS: Loaded " + players.length +
+                " shared player records."
+            );
+        } catch (error) {
+            console.error(
+                "Shared Player Database test failed:",
+                error.message
+            );
+        }
+    };
     
     function esc(x){return String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
     
