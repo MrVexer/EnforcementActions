@@ -682,6 +682,142 @@ if (
       }
     }
 
+
+    // Section 2: server-authorized, audited shared infraction records.
+    if (url.pathname === "/api/infractions" || url.pathname.startsWith("/api/infractions/")) {
+      const collection = url.pathname === "/api/infractions";
+      const allowed = collection ? ["GET", "POST"] : ["PUT", "DELETE"];
+      if (!allowed.includes(request.method)) return json({error:"Method not allowed"},405);
+      try {
+        const auth = await verifyStaff(request,env);
+        if (!auth.ok) return auth;
+        const staff = await auth.json();
+        const roles = staff.roles || [];
+        const managers = ["operations_manager","head_of_enforcement"];
+        const editors = [...managers,"enforcement_captain","enforcement_officer"];
+        const readers = [...editors,"trial_enforcement","support_team"];
+        const canView = roles.some(role=>readers.includes(role));
+        const canEdit = roles.some(role=>editors.includes(role));
+        const canDelete = roles.some(role=>managers.includes(role));
+        if (!staff.authorized || (request.method==="GET" ? !canView :
+            request.method==="DELETE" ? !canDelete : !canEdit)) {
+          return json({error:"Insufficient permissions"},403);
+        }
+        if (!env.SUPABASE_SECRET_KEY) return json({error:"Database unavailable"},503);
+        const headers = {
+          apikey:env.SUPABASE_SECRET_KEY,
+          "Content-Type":"application/json",
+          Accept:"application/json"
+        };
+        if (request.method==="GET") {
+          const response = await fetch(
+            `${SUPABASE_URL}/rest/v1/vr_infractions?select=id,record,updated_at&order=updated_at.desc&limit=200`,
+            {headers,cache:"no-store"}
+          );
+          if (!response.ok) return json({error:"Unable to load infractions"},503);
+          return json({success:true,infractions:await response.json()});
+        }
+
+        const id = collection ? crypto.randomUUID() :
+          decodeURIComponent(url.pathname.slice("/api/infractions/".length));
+        if (!/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i.test(id)) {
+          return json({error:"Invalid infraction ID"},400);
+        }
+        const raw = await request.text();
+        if (new TextEncoder().encode(raw).length>32768) return json({error:"Request too large"},413);
+        let input;
+        try { input=JSON.parse(raw); } catch { return json({error:"Invalid JSON"},400); }
+        if (!input || typeof input!=="object" || Array.isArray(input)) {
+          return json({error:"Invalid infraction data"},400);
+        }
+        let expected;
+        if (!collection) {
+          expected=input.expectedUpdatedAt;
+          if (typeof expected!=="string" || !/^\d{4}-\d{2}-\d{2}T/.test(expected) ||
+              !Number.isFinite(Date.parse(expected))) {
+            return json({error:"Missing or invalid record version"},400);
+          }
+        }
+
+        const apiError = async response => {
+          const error=await response.json().catch(()=>({}));
+          if (error.code==="P0001") return json({error:"This infraction changed. Refresh before editing."},409);
+          if (error.code==="P0002") return json({error:error.message||"Record not found"},404);
+          if (error.code==="P0003") return json({error:"This infraction has linked punishments and cannot be deleted."},409);
+          if (error.code==="23505") return json({error:"Duplicate infraction ID"},409);
+          console.error("Infraction database error:",response.status,error.code);
+          return json({error:"Infraction database operation failed"},503);
+        };
+        const rpc = async (name,params) => {
+          const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`,{
+            method:"POST",headers,body:JSON.stringify(params),cache:"no-store"
+          });
+          if (!response.ok) return apiError(response);
+          return json(await response.json(),request.method==="POST"?201:200);
+        };
+        if (request.method==="DELETE") {
+          return rpc("vr_delete_infraction",{
+            p_id:id,p_actor_discord_id:staff.discordId,
+            p_actor_username:staff.username,p_expected_updated_at:expected
+          });
+        }
+
+        const limits = {
+          player:64,type:150,severity:20,date:10,officer:120,status:30,
+          description:8000,investigationNotes:8000,assignedOfficer:120,
+          investigationStage:40,casePriority:20,investigationFindings:8000,
+          caseOutcome:40,resolutionNotes:8000,resolutionDate:10,evidence:8000
+        };
+        const fields={};
+        for (const [key,max] of Object.entries(limits)) {
+          if (typeof input[key]!=="string") return json({error:`Invalid ${key}`},400);
+          fields[key]=input[key].trim();
+          if (fields[key].length>max) return json({error:`Field too long: ${key}`},400);
+        }
+        if (!/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i.test(fields.player)) {
+          return json({error:"Select a valid shared player"},400);
+        }
+        if (!fields.type) return json({error:"Rule violated is required"},400);
+        const validOptions = {
+          severity:["Low","Moderate","High","Critical"],
+          status:["Open","Investigating","Resolved","Dismissed"],
+          investigationStage:["Reported","Assigned","Investigating","Pending Review","Closed"],
+          casePriority:["Low","Normal","High","Urgent"],
+          caseOutcome:["Undetermined","Substantiated","Unsubstantiated","Inconclusive","Withdrawn"]
+        };
+        for (const [key,options] of Object.entries(validOptions)) {
+          if (!options.includes(fields[key])) return json({error:`Invalid ${key}`},400);
+        }
+        for (const key of ["date","resolutionDate"]) {
+          if (fields[key] && !/^\d{4}-\d{2}-\d{2}$/.test(fields[key])) {
+            return json({error:`Invalid ${key}`},400);
+          }
+        }
+
+        let record;
+        if (collection) {
+          record={id,...fields,createdAt:new Date().toISOString()};
+        } else {
+          const response=await fetch(
+            `${SUPABASE_URL}/rest/v1/vr_infractions?id=eq.${encodeURIComponent(id)}&select=id,record&limit=1`,
+            {headers,cache:"no-store"}
+          );
+          if (!response.ok) return json({error:"Unable to load infraction"},503);
+          const rows=await response.json();
+          if (!rows.length) return json({error:"Infraction not found"},404);
+          record={...rows[0].record,id,...fields};
+        }
+        return rpc(collection?"vr_create_infraction":"vr_update_infraction",{
+          p_id:id,p_record:record,
+          p_actor_discord_id:staff.discordId,p_actor_username:staff.username,
+          ...(collection?{}:{p_expected_updated_at:expected})
+        });
+      } catch (error) {
+        console.error("Infraction API error:",error);
+        return json({error:"Infraction service temporarily unavailable"},503);
+      }
+    }
+
     if (url.pathname.startsWith("/api/")) {
       return json(
         { error: "Endpoint not available" },
