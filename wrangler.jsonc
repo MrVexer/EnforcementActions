@@ -1,7 +1,10 @@
 {
   "name": "enforcementactions",
   "compatibility_date": "2026-10-24",
+  "main": "worker.js",
   "assets": {
-    "directory": "./"
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
   }
 }
