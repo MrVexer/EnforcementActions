@@ -12530,6 +12530,29 @@ renderStaffAdministration = function () {
 const renderBeforeSharedPlayers = render;
 let sharedPlayerRenderVersion = 0;
 let sharedPlayerSearch = "";
+let sharedPlayerShowArchived = false;
+function canRetainSharedPlayers() {
+    return window.vrStaffPermissions?.authorized === true &&
+        Array.isArray(window.vrStaffPermissions.roles) &&
+        window.vrStaffPermissions.roles.some(role =>
+            ["operations_manager", "head_of_enforcement"].includes(role));
+}
+async function retainSharedPlayer(player, action) {
+    if (!canRetainSharedPlayers() || page !== "players" ||
+        !document.body.classList.contains("vr-workspace-authorized")) return;
+    const label = action === "delete" ? "permanently DELETE" : action;
+    if (!confirm(`Do you want to ${label} ${player.name || "this player"}?`)) return;
+    if (action === "delete" && prompt('Type DELETE to confirm permanent removal:') !== 'DELETE') return;
+    try {
+        await sharedPlayerRequest(`/api/player-management/${encodeURIComponent(player.id)}`, "POST", {
+            action, expectedUpdatedAt: player.updated_at
+        });
+        if (page === "players") render();
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
 
 function canManageSharedPlayers() {
     return window.vrStaffPermissions?.authorized === true &&
@@ -12722,6 +12745,18 @@ render = function () {
         refresh.textContent = "Refresh";
         refresh.onclick = () => render();
         toolbar.append(search, refresh);
+        if (canRetainSharedPlayers()) {
+            const label = document.createElement("label");
+            label.style.display = "inline-flex";
+            label.style.alignItems = "center";
+            label.style.gap = "8px";
+            const toggle = document.createElement("input");
+            toggle.type = "checkbox";
+            toggle.checked = sharedPlayerShowArchived;
+            toggle.onchange = () => { sharedPlayerShowArchived = toggle.checked; updateRows(); };
+            label.append(toggle, document.createTextNode("Show archived players"));
+            toolbar.appendChild(label);
+        }
         content.appendChild(toolbar);
 
         const panel = document.createElement("div");
@@ -12752,6 +12787,7 @@ render = function () {
             tbody.replaceChildren();
             const term = sharedPlayerSearch.trim().toLowerCase();
             const visible = players.filter(player =>
+                (sharedPlayerShowArchived || player.archived !== true) &&
                 [player.name, player.discord, player.characters, player.notes]
                     .some(value => String(value ?? "").toLowerCase().includes(term))
             );
@@ -12771,6 +12807,24 @@ render = function () {
                     button.textContent = "Edit";
                     button.onclick = () => openSharedPlayerForm(player);
                     td.appendChild(button);
+                    if (canRetainSharedPlayers()) {
+                        const archive = document.createElement("button");
+                        archive.type = "button";
+                        archive.className = "secondary";
+                        archive.style.marginLeft = "6px";
+                        archive.textContent = player.archived === true ? "Restore" : "Archive";
+                        archive.onclick = () => retainSharedPlayer(player, player.archived === true ? "restore" : "archive");
+                        td.appendChild(archive);
+                        if (player.archived !== true) {
+                            const remove = document.createElement("button");
+                            remove.type = "button";
+                            remove.className = "secondary";
+                            remove.style.marginLeft = "6px";
+                            remove.textContent = "Delete";
+                            remove.onclick = () => retainSharedPlayer(player, "delete");
+                            td.appendChild(remove);
+                        }
+                    }
                     tr.appendChild(td);
                 }
                 tbody.appendChild(tr);
@@ -14309,7 +14363,7 @@ function vrAdvancedLiveSearch(){
   function paint(){
    grid.replaceChildren();
    const query=vrAdvancedLiveQuery.trim().toLowerCase();
-   const results=players.map(member=>{
+   const results=players.filter(member=>member.archived!==true).map(member=>{
     const pi=infractions.filter(x=>x.player===member.id);
     const pp=punishments.filter(x=>x.player===member.id);
     const pa=appeals.filter(x=>x.player===member.id);
