@@ -308,7 +308,9 @@ export default {
         // Temporary restriction: Operations Managers only.
         if (
           staff.authorized !== true ||
-          !staff.roles?.includes("operations_manager")
+          !staff.roles?.some(role =>
+  ["operations_manager", "head_of_enforcement"].includes(role)
+)
         ) {
           return json({ error: "Insufficient permissions" }, 403);
         }
@@ -501,7 +503,9 @@ export default {
 
         if (
           staff.authorized !== true ||
-          !staff.roles?.includes("operations_manager")
+          !staff.roles?.some(role =>
+  ["operations_manager", "head_of_enforcement"].includes(role)
+)
         ) {
           return json({ error: "Insufficient permissions" }, 403);
         }
