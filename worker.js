@@ -1248,9 +1248,22 @@ if (
         if (url.pathname.endsWith("/audit")) {
           // Audit events contain internal actor information and historical snapshots.
           if (!isManager) return json({error:"Insufficient permissions for audit history"},403);
-          const rows=await getRows("vr_audit_events",150);
+          // Audit events may not have an updated_at column. Their timestamps
+          // are stored in the JSON record, so never select/order by updated_at.
+          const auditResponse=await fetch(
+            `${SUPABASE_URL}/rest/v1/vr_audit_events?select=id,record&limit=1000`,
+            {headers,cache:"no-store"}
+          );
+          if (!auditResponse.ok) {
+            const detail=await auditResponse.json().catch(()=>({}));
+            console.error("Audit feed query failed",auditResponse.status,detail.code,detail.message);
+            return json({error:"Unable to load audit history",code:detail.code||null},503);
+          }
+          const rows=(await auditResponse.json()).sort((a,b)=>
+            String(b.record?.timestamp||"").localeCompare(String(a.record?.timestamp||""))
+          ).slice(0,150);
           return json({success:true,events:rows.map(row=>({
-            id:row.id,updated_at:row.updated_at,record:{
+            id:row.id,updated_at:row.record?.timestamp||null,record:{
               action:String(row.record?.action||"Unknown"),
               targetType:String(row.record?.targetType||""),
               targetId:String(row.record?.targetId||""),
