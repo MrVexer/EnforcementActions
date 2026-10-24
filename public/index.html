@@ -3755,8 +3755,19 @@ body.vr-workspace-authorized #vr-auth-screen {
 
     let updateCounter = 0;
 
+// Workspace visibility is controlled by the login verification process.
+function setWorkspaceAccess(authorized) {
+  document.body.classList.toggle(
+    "vr-workspace-authorized",
+    authorized === true
+  );
+}
+
     async function updateLoginState() {
-      const currentUpdate = ++updateCounter;
+  const currentUpdate = ++updateCounter;
+
+  // Lock the workspace while authentication is being checked.
+  setWorkspaceAccess(false);
 
       const { data, error } =
         await client.auth.getUser();
