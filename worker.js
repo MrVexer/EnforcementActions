@@ -947,8 +947,12 @@ if (
           const detail=await response.json().catch(()=>({}));
           if (detail.code==="P0001") return json({error:"This appeal changed. Refresh before editing."},409);
           if (["P0002","P0003"].includes(detail.code)) return json({error:detail.message||"Appeal validation failed"},409);
-          console.error("Appeal RPC failed",response.status,detail.code);
-          return json({error:"Appeal database operation failed"},503);
+          console.error("Appeal RPC failed",response.status,detail.code,detail.message);
+          // Diagnostic only: the caller has already passed Discord staff verification.
+          // Do not expose SQL details or credentials in this response.
+          const safeCode=typeof detail.code==="string"?detail.code.slice(0,20):"unknown";
+          const safeMessage=typeof detail.message==="string"?detail.message.slice(0,300):"No database message";
+          return json({error:`Appeal database error (${safeCode}): ${safeMessage}`},503);
         };
         const rpc=async(name,params)=>{
           const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`,{method:"POST",headers,body:JSON.stringify(params),cache:"no-store"});
