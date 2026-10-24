@@ -12522,134 +12522,282 @@ renderStaffAdministration = function () {
     pcmRefresh();
 };
    
+
  // ==========================================
- // SHARED PLAYER DATABASE - PAGE DISPLAY
+ // SHARED PLAYER DATABASE - LIVE MANAGEMENT
  // ==========================================
 
 const renderBeforeSharedPlayers = render;
+let sharedPlayerRenderVersion = 0;
+let sharedPlayerSearch = "";
 
-render = function () {
-    if (page !== "players") {
-        return renderBeforeSharedPlayers();
+function canManageSharedPlayers() {
+    return window.vrStaffPermissions?.authorized === true &&
+        Array.isArray(window.vrStaffPermissions.roles) &&
+        window.vrStaffPermissions.roles.some(role =>
+            ["operations_manager", "head_of_enforcement", "enforcement_captain"].includes(role)
+        );
+}
+
+async function sharedPlayerRequest(path, method, body) {
+    // Retrieve the session fresh for each request; never store tokens in records.
+    const session = JSON.parse(
+        localStorage.getItem("sb-jhkvaxvqfoqvihnkqkxz-auth-token") || "null"
+    );
+    if (!session?.access_token || !document.body.classList.contains("vr-workspace-authorized")) {
+        throw new Error("Please sign in with Discord again.");
     }
 
+    const response = await fetch(path, {
+        method,
+        headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            ...(body === undefined ? {} : {"Content-Type": "application/json"})
+        },
+        ...(body === undefined ? {} : {body: JSON.stringify(body)}),
+        cache: "no-store"
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.success !== true) {
+        throw new Error(result.error || `Player request failed (${response.status}).`);
+    }
+    return result;
+}
+
+function openSharedPlayerForm(player = null) {
+    if (page !== "players" || !canManageSharedPlayers() ||
+        !document.body.classList.contains("vr-workspace-authorized")) return;
+
+    const editing = Boolean(player);
+    const modal = document.getElementById("modalback");
+    const body = document.getElementById("modalBody");
+    document.getElementById("modalTitle").textContent =
+        editing ? "Edit Shared Player" : "Create Shared Player";
+
+    // Use DOM properties instead of interpolating player data into HTML.
+    body.replaceChildren();
+    const form = document.createElement("form");
+    form.className = "formgrid";
+    const controls = {};
+
+    for (const [key, label, max, multiline] of [
+        ["name", "Player name", 100, false],
+        ["discord", "Discord ID (17–20 digits, optional)", 20, false],
+        ["characters", "Character names", 2000, false],
+        ["notes", "Internal notes", 5000, true]
+    ]) {
+        const field = document.createElement("div");
+        field.className = "field" + (multiline ? " full" : "");
+        const caption = document.createElement("label");
+        caption.textContent = label;
+        const control = document.createElement(multiline ? "textarea" : "input");
+        if (!multiline) control.type = "text";
+        control.maxLength = max;
+        control.value = String(player?.[key] ?? "");
+        control.required = key === "name";
+        if (key === "discord") {
+            control.inputMode = "numeric";
+            control.pattern = "[0-9]{17,20}";
+        }
+        caption.appendChild(control);
+        field.appendChild(caption);
+        form.appendChild(field);
+        controls[key] = control;
+    }
+
+    const feedback = document.createElement("p");
+    feedback.className = "notice";
+    feedback.style.display = "none";
+    feedback.style.gridColumn = "1 / -1";
+    feedback.setAttribute("role", "alert");
+    form.appendChild(feedback);
+
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    actions.style.gridColumn = "1 / -1";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "secondary";
+    cancel.textContent = "Cancel";
+    cancel.onclick = () => close();
+    const saveButton = document.createElement("button");
+    saveButton.type = "submit";
+    saveButton.className = "primary";
+    saveButton.textContent = editing ? "Save Changes" : "Create Player";
+    actions.append(cancel, saveButton);
+    form.appendChild(actions);
+
+    form.onsubmit = async event => {
+        event.preventDefault();
+        if (!canManageSharedPlayers()) {
+            feedback.textContent = "Insufficient permissions.";
+            feedback.style.display = "";
+            return;
+        }
+        const values = Object.fromEntries(
+            Object.entries(controls).map(([key, input]) => [key, input.value.trim()])
+        );
+        if (!values.name || values.name.length > 100) {
+            feedback.textContent = "Enter a player name (maximum 100 characters).";
+            feedback.style.display = "";
+            return;
+        }
+        if (values.discord && !/^[0-9]{17,20}$/.test(values.discord)) {
+            feedback.textContent = "Discord ID must contain 17–20 digits.";
+            feedback.style.display = "";
+            return;
+        }
+
+        saveButton.disabled = true;
+        cancel.disabled = true;
+        saveButton.textContent = "Saving...";
+        feedback.style.display = "none";
+        try {
+            const endpoint = editing
+                ? `/api/players/${encodeURIComponent(player.id)}`
+                : "/api/players";
+            const payload = editing
+                ? {...values, expectedUpdatedAt: player.updated_at}
+                : values;
+            await sharedPlayerRequest(endpoint, editing ? "PUT" : "POST", payload);
+            close();
+            if (page === "players") render();
+        } catch (error) {
+            feedback.textContent = error.message;
+            feedback.style.display = "";
+        } finally {
+            saveButton.disabled = false;
+            cancel.disabled = false;
+            saveButton.textContent = editing ? "Save Changes" : "Create Player";
+        }
+    };
+
+    body.appendChild(form);
+    modal.classList.add("show");
+    controls.name.focus();
+}
+
+document.getElementById("add").onclick = () => {
+    if (page === "players") {
+        openSharedPlayerForm();
+    } else {
+        edit(null);
+    }
+};
+
+render = function () {
+    const version = ++sharedPlayerRenderVersion;
+    if (page !== "players") return renderBeforeSharedPlayers();
+
     nav();
+    document.getElementById("title").textContent = "Player Database";
+    document.getElementById("crumb").textContent = "Player Database";
+    document.getElementById("subtitle").textContent = "Shared player records";
 
-    document.getElementById("title").textContent =
-        "Player Database";
-
-    document.getElementById("crumb").textContent =
-        "Player Database";
-
-    document.getElementById("subtitle").textContent =
-        "Shared player records";
-
-    // Only authorised staff can see the Create Player button.
-const canCreatePlayers =
-    window.vrStaffPermissions?.authorized === true &&
-    window.vrStaffPermissions.roles.some(role =>
-        [
-            "operations_manager",
-            "head_of_enforcement",
-            "enforcement_captain"
-        ].includes(role)
-    );
-
-const addButton = document.getElementById("add");
-
-addButton.style.display = canCreatePlayers ? "" : "none";
+    const addButton = document.getElementById("add");
+    addButton.style.display = canManageSharedPlayers() ? "" : "none";
+    addButton.textContent = "Create Player";
 
     const content = document.getElementById("content");
+    content.replaceChildren();
+    const loading = document.createElement("div");
+    loading.className = "panel";
+    loading.textContent = "Loading shared player records...";
+    content.appendChild(loading);
 
-    content.innerHTML =
-        '<div class="panel">Loading shared player records...</div>';
+    loadSharedPlayers().then(players => {
+        if (page !== "players" || version !== sharedPlayerRenderVersion ||
+            !document.body.classList.contains("vr-workspace-authorized")) return;
 
-    loadSharedPlayers()
-        .then(players => {
-            // Do not overwrite another page if staff navigated away.
-            if (page !== "players") return;
+        content.replaceChildren();
+        const toolbar = document.createElement("div");
+        toolbar.className = "toolbar";
+        const search = document.createElement("input");
+        search.className = "search";
+        search.type = "search";
+        search.placeholder = "Search player names, Discord IDs, characters or notes...";
+        search.value = sharedPlayerSearch;
+        const refresh = document.createElement("button");
+        refresh.className = "secondary";
+        refresh.textContent = "Refresh";
+        refresh.onclick = () => render();
+        toolbar.append(search, refresh);
+        content.appendChild(toolbar);
 
-            content.replaceChildren();
+        const panel = document.createElement("div");
+        panel.className = "panel";
+        const heading = document.createElement("h2");
+        panel.appendChild(heading);
+        const wrapper = document.createElement("div");
+        wrapper.className = "tablewrap";
+        const tableElement = document.createElement("table");
+        const thead = document.createElement("thead");
+        const headerRow = document.createElement("tr");
+        const columns = ["Player Name", "Discord ID", "Characters", "Notes"];
+        if (canManageSharedPlayers()) columns.push("Actions");
+        for (const label of columns) {
+            const th = document.createElement("th");
+            th.textContent = label;
+            headerRow.appendChild(th);
+        }
+        thead.appendChild(headerRow);
+        tableElement.appendChild(thead);
+        const tbody = document.createElement("tbody");
+        tableElement.appendChild(tbody);
+        wrapper.appendChild(tableElement);
+        panel.appendChild(wrapper);
+        content.appendChild(panel);
 
-            const panel = document.createElement("div");
-            panel.className = "panel";
-
-            const heading = document.createElement("h2");
-            heading.textContent =
-                "Shared Players (" + players.length + ")";
-
-            panel.appendChild(heading);
-
-            const wrapper = document.createElement("div");
-            wrapper.className = "tablewrap";
-
-            const tableElement = document.createElement("table");
-
-            const thead = document.createElement("thead");
-            const headerRow = document.createElement("tr");
-
-            for (const label of [
-                "Player Name",
-                "Discord ID",
-                "Characters",
-                "Notes"
-            ]) {
-                const th = document.createElement("th");
-                th.textContent = label;
-                headerRow.appendChild(th);
-            }
-
-            thead.appendChild(headerRow);
-            tableElement.appendChild(thead);
-
-            const tbody = document.createElement("tbody");
-
-            for (const player of players) {
+        function updateRows() {
+            tbody.replaceChildren();
+            const term = sharedPlayerSearch.trim().toLowerCase();
+            const visible = players.filter(player =>
+                [player.name, player.discord, player.characters, player.notes]
+                    .some(value => String(value ?? "").toLowerCase().includes(term))
+            );
+            heading.textContent = `Shared Players (${visible.length} of ${players.length})`;
+            for (const player of visible) {
                 const tr = document.createElement("tr");
-
-                for (const value of [
-                    player.name,
-                    player.discord,
-                    player.characters,
-                    player.notes
-                ]) {
+                for (const value of [player.name, player.discord, player.characters, player.notes]) {
                     const td = document.createElement("td");
                     td.textContent = String(value ?? "");
                     tr.appendChild(td);
                 }
-
+                if (canManageSharedPlayers()) {
+                    const td = document.createElement("td");
+                    const button = document.createElement("button");
+                    button.type = "button";
+                    button.className = "secondary";
+                    button.textContent = "Edit";
+                    button.onclick = () => openSharedPlayerForm(player);
+                    td.appendChild(button);
+                    tr.appendChild(td);
+                }
                 tbody.appendChild(tr);
             }
-
-            if (players.length === 0) {
+            if (!visible.length) {
                 const tr = document.createElement("tr");
                 const td = document.createElement("td");
-
-                td.colSpan = 4;
+                td.colSpan = columns.length;
                 td.className = "empty";
-                td.textContent = "No shared players found.";
-
+                td.textContent = players.length ? "No matching players." : "No shared players found.";
                 tr.appendChild(td);
                 tbody.appendChild(tr);
             }
-
-            tableElement.appendChild(tbody);
-            wrapper.appendChild(tableElement);
-            panel.appendChild(wrapper);
-            content.appendChild(panel);
-        })
-        .catch(error => {
-            if (page !== "players") return;
-
-            content.replaceChildren();
-
-            const message = document.createElement("div");
-            message.className = "notice";
-            message.textContent =
-                "Unable to load shared players: " + error.message;
-
-            content.appendChild(message);
-        });
+        }
+        search.oninput = () => {
+            sharedPlayerSearch = search.value;
+            updateRows();
+        };
+        updateRows();
+    }).catch(error => {
+        if (page !== "players" || version !== sharedPlayerRenderVersion) return;
+        content.replaceChildren();
+        const notice = document.createElement("div");
+        notice.className = "notice";
+        notice.textContent = "Unable to load shared players: " + error.message;
+        content.appendChild(notice);
+    });
 };
 
 // Render the workspace.
