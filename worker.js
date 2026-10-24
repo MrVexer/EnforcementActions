@@ -283,6 +283,64 @@ export default {
       }
     }
 
+        // STEP 14: Secure Player Database - read-only test
+    if (url.pathname === "/api/players") {
+      if (request.method !== "GET") {
+        return json({ error: "Method not allowed" }, 405);
+      }
+
+      try {
+        const authResponse = await verifyStaff(request, env);
+
+        if (!authResponse.ok) {
+          return authResponse;
+        }
+
+        const staff = await authResponse.json();
+
+        // Temporary strict permission:
+        // Operations Managers only.
+        if (
+          staff.authorized !== true ||
+          !staff.roles?.includes("operations_manager")
+        ) {
+          return json({ error: "Insufficient permissions" }, 403);
+        }
+
+        if (!env.SUPABASE_SECRET_KEY) {
+          return json({ error: "Database unavailable" }, 503);
+        }
+
+        const response = await fetch(
+          `${SUPABASE_URL}/rest/v1/vr_players?select=id,record,updated_at&order=updated_at.desc&limit=50`,
+          {
+            headers: {
+              apikey: env.SUPABASE_SECRET_KEY,
+              Accept: "application/json"
+            },
+            cache: "no-store"
+          }
+        );
+
+        if (!response.ok) {
+          console.error("Player database error:", response.status);
+          return json({ error: "Unable to load players" }, 503);
+        }
+
+        const players = await response.json();
+
+        return json({
+          success: true,
+          players,
+          count: players.length
+        });
+
+      } catch (error) {
+        console.error("Player endpoint error:", error);
+        return json({ error: "Service unavailable" }, 503);
+      }
+    }
+
     if (url.pathname.startsWith("/api/")) {
       return json(
         { error: "Endpoint not available" },
